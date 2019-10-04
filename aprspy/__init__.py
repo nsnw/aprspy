@@ -1,0 +1,1380 @@
+#!/usr/bin/env python
+
+import re
+import logging
+
+from hashlib import md5
+from datetime import datetime, timedelta
+
+from typing import Union, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+class ParseError(Exception):
+    """
+    Parsing exception
+    """
+    def __init__(self, message: str, packet=None):
+        super(ParseError, self).__init__(message)
+
+        self.packet = packet
+
+
+class UnsupportedError(Exception):
+    """
+    Thrown when packets are of an unsupported format
+    """
+    def __init__(self, message: str, packet=None):
+        super(UnsupportedError, self).__init__(message)
+
+        self.packet = packet
+
+
+class APRSPacket:
+
+    def __init__(self, source: str = None, destination: str = None, path: str = None,
+                 info: str = None, raw: str = None, timestamp: str = None, data_type_id: str = None,
+                 symbol_table: str = None, symbol: str = None):
+        # If raw is given, only set that
+        if raw:
+            self._raw = raw
+        else:
+            # Set source, destination, path and info (if given)
+            self._source = source
+            self._destination = destination
+            self._path = path
+            self._info = info
+
+            # If info isn't specified, set the timestamp, data, data type, data type ID,
+            # symbol table and symbol (if given)
+            if not info:
+                self._timestamp = timestamp
+                self._data_type_id = data_type_id
+                self._symbol_table = symbol_table
+                self._symbol = symbol
+
+        self._checksum = None
+
+    @property
+    def raw(self) -> str:
+        """Get the raw data of the packet in TNC2 format"""
+        return self._raw
+
+    @raw.setter
+    def raw(self, value: str):
+        """Set the raw data of the packet in TNC2 format"""
+        self._raw = value
+
+    @property
+    def source(self) -> str:
+        """Get the source address of the packet"""
+        return self._source
+
+    @source.setter
+    def source(self, value: str):
+        """Set the source address of the packet"""
+        self._source = value
+
+    @property
+    def destination(self) -> str:
+        """Get the destination address of the packet"""
+        return self._destination
+
+    @destination.setter
+    def destination(self, value: str):
+        """Set the destination address of the packet"""
+        self._destination = value
+
+    @property
+    def path(self) -> str:
+        """Get the path of the packet"""
+        return self._path
+
+    @path.setter
+    def path(self, value: str):
+        """Set the path for the packet"""
+        self._path = value
+
+    @property
+    def info(self) -> str:
+        """Get the information field of the packet"""
+        return self._info
+
+    @info.setter
+    def info(self, value: str):
+        """Set the information field of the packet"""
+        self._info = value
+
+    @property
+    def timestamp(self) -> str:
+        """Get the timestamp of the packet"""
+        return self._timestamp
+
+    @timestamp.setter
+    def timestamp(self, value: str):
+        """Set the timestamp of the packet"""
+        self._timestamp = value
+
+    @property
+    def data_type_id(self) -> str:
+        """Get the data type ID of the packet"""
+        return self._data_type_id
+
+    @data_type_id.setter
+    def data_type_id(self, value: str):
+        """Set the data type ID of the packet"""
+        self._data_type_id = value
+
+    @property
+    def symbol_table(self) -> str:
+        """Get the symbol table of the packet"""
+        return self._symbol_table
+
+    @symbol_table.setter
+    def symbol_table(self, value: str):
+        """Set the symbol table of the packet"""
+        self._symbol_table = value
+
+    @property
+    def symbol(self) -> str:
+        """Get the symbol of the packet"""
+        return self._symbol
+
+    @symbol.setter
+    def symbol(self, value: str):
+        """Set the symbol of the packet"""
+        self._symbol = value
+
+    def _dump(self):
+        raw_codes = []
+        for raw in self.raw:
+            raw_codes.append(ord(raw))
+
+        return raw_codes
+
+    def __repr__(self):
+        if self.source:
+            return "<APRSPacket: {}>".format(self.source)
+        else:
+            return "<APRSPacket>"
+
+
+class PositionPacket(APRSPacket):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._latitude = None
+        self._longitude = None
+        self._ambiguity = None
+        self._course = None
+        self._speed = None
+        self._altitude = None
+        self._radio_range = None
+        self._comment = None
+
+    @property
+    def latitude(self) -> float:
+        return self._latitude
+
+    @latitude.setter
+    def latitude(self, value: float):
+        self._latitude = value
+
+    @property
+    def longitude(self) -> float:
+        return self._longitude
+
+    @longitude.setter
+    def longitude(self, value: float):
+        self._longitude = value
+
+    @property
+    def ambiguity(self) -> int:
+        return self._ambiguity
+
+    @ambiguity.setter
+    def ambiguity(self, value: int):
+        self._ambiguity = value
+
+    @property
+    def course(self) -> int:
+        return self._course
+
+    @course.setter
+    def course(self, value: int):
+        self._course = value
+
+    @property
+    def speed(self) -> int:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: int):
+        self._speed = value
+
+    @property
+    def altitude(self) -> int:
+        return self._altitude
+
+    @altitude.setter
+    def altitude(self, value: int):
+        self._altitude = value
+
+    @property
+    def radio_range(self) -> int:
+        return self._radio_range
+
+    @radio_range.setter
+    def radio_range(self, value: int):
+        self._radio_range = value
+
+    @property
+    def comment(self) -> str:
+        return self._comment
+
+    @comment.setter
+    def comment(self, value: str):
+        self._comment = value
+
+    @staticmethod
+    def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
+        lat, ambiguity = APRS.decode_uncompressed_latitude(data[0:8])
+        lng = APRS.decode_uncompressed_longitude(data[9:18])
+
+        logger.debug("Latitude: {} ({}) Longitude: {}".format(
+            lat, ambiguity, lng
+        ))
+
+        try:
+            symbol_table = data[8]
+            logger.debug("Symbol table: {}".format(symbol_table))
+        except IndexError:
+            raise ParseError("Missing symbol table identifier")
+
+        try:
+            symbol = data[18]
+            logger.debug("Symbol: {}".format(symbol))
+        except IndexError:
+            raise ParseError("Missing symbol identifier")
+
+        return (lat, lng, ambiguity, symbol_table, symbol)
+
+    @staticmethod
+    def _parse_compressed_position(data: str) -> Tuple[
+            float, float, float, str, int, float, float]:
+        logger.debug("Compressed lat/lng is: {}".format(data))
+
+        comp_lat = data[1:5]
+        comp_lng = data[5:9]
+
+        latitude = APRS.decode_compressed_latitude(comp_lat)
+        longitude = APRS.decode_compressed_longitude(comp_lng)
+
+        logger.debug("Latitude: {} Longitude: {}".format(latitude, longitude))
+
+        try:
+            comp_type = "{:0>8b}".format((ord(data[12])-33))[::-1]
+        except IndexError:
+            raise ParseError("Couldn't parse compressed type")
+
+        altitude = None
+        course = None
+        speed = None
+        radio_range = None
+
+        # check for altitude, course/speed or radio range
+        if comp_type[3] == "0" and comp_type[4] == "1":
+            # altitude from GGA sentence
+            c = ord(data[10]) - 33
+            s = ord(data[11]) - 33
+
+            # base91 conversion
+            altitude = (1.002 ** (c * 91 + s))
+
+            logger.debug("Altitude: {}".format(altitude))
+
+        elif 0 <= (ord(data[10])-33) <= 89:
+            # course/speed
+            course = (ord(data[10])-33) * 4
+            speed = 1.08 ** (ord(data[11])-33) - 1
+
+            logger.debug("Course: {} Speed: {}".format(course, speed))
+
+        elif data[10] == "{":
+            # radio range
+            radio_range = 2 * (1.08 ** (ord(data[11])-33))
+
+            logger.debug("Radio range: {}".format(radio_range))
+
+        elif data[10] == " ":
+            logger.debug("No course, speed or range data")
+
+        else:
+            raise ParseError("Invalid character when looking for course/speed or range: {}".format(
+                data[10]
+            ))
+
+        return (latitude, longitude, altitude, course, speed, radio_range)
+
+    @staticmethod
+    def _parse_data(data: str) -> Tuple[str, str, str, int, int, int, str]:
+        phg = None
+        rng = None
+        dfs = None
+        course = None
+        speed = None
+        altitude = None
+        comment = None
+
+        # check for PHG
+        if re.match(r'^PHG[0-9]{4}', data[:7]):
+            # TODO - add phg to packet
+            # TODO - expand
+            phg = data[3:7]
+            logger.debug("PHG is {}".format(phg))
+            data = data[7:]
+
+        elif re.match('^RNG[0-9]{4}', data[:7]):
+            # TODO - add rng to packet
+            # TODO - expand
+            rng = data[3:7]
+            logger.debug("RNG is {}".format(rng))
+            data = data[7:]
+
+        elif re.match('^DFS[0-9]{4}', data[:7]):
+            # TODO - add dfs to packet
+            # TODO - expand
+            dfs = data[3:7]
+            logger.debug("DFS is {}".format(dfs))
+            data = data[7:]
+
+        elif re.match('^[0-9]{3}/[0-9]{3}', data[:7]):
+            # TODO - fix formats
+            course = int(data[:3])
+            speed = int(data[4:7])
+            logger.debug("Course is {}, speed is {}".format(course, speed))
+            data = data[7:]
+
+        # check for comment
+        if len(data) > 0:
+
+            # check for altitude
+            # as per spec ch6 p26, altitude as /A=nnnnnn may appear anywhere in
+            # the comment
+            has_altitude = re.match('.*/A=([0-9]{6}).*', data)
+            if has_altitude:
+                # TODO - fix altitude format
+                altitude = int(has_altitude.groups()[0])
+                logger.debug("Altitude is {} ft".format(altitude))
+
+            # TODO - add comment to packet
+            comment = data
+            logger.debug("Comment is {}".format(comment))
+
+        return (phg, rng, dfs, course, speed, altitude, comment)
+
+    def _parse(self) -> bool:
+
+        if self.data_type_id == '!':
+            # Packet has no timestamp, station has no messaging capability
+            timestamp = False
+            self.messaging = False
+
+        elif self.data_type_id == '/':
+            # Packet has timestamp, station has no messaging capability
+            timestamp = True
+            self.messaging = False
+
+            # Parse timestamp
+            self.timestamp = APRS.decode_timestamp(self.info[1:8])
+
+        elif self.data_type_id == '=':
+            # Packet has no timestamp, station has messaging capability
+            timestamp = False
+            self.messaging = True
+
+        elif self.data_type_id == '@':
+            # Packet has timestamp, station has messaging capability
+            timestamp = True
+            self.messaging = True
+
+            # Parse timestamp
+            self.timestamp = APRS.decode_timestamp(self.info[1:8])
+
+        else:
+            # This isn't a position packet
+            raise ParseError("Unknown position data type: {}".format(self.data_type_id))
+
+        # Check to see if the position data is compressed or uncompressed
+        if timestamp is False:
+            data = self.info[1:]
+        else:
+            data = self.info[8:]
+
+        if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
+            (self.latitude, self.longitude, self.ambiguity, self.symbol_table, self.symbol
+             ) = self._parse_uncompressed_position(data)
+            if len(data) > 19:
+                (self.phg, self.radio_range, self.dfs, self.course, self.speed, self.altitude,
+                 self.comment) = self._parse_data(data[19:])
+        else:
+            compressed_position = data[0:13]
+            (self.latitude, self.longitude, self.altitude, self.course, self.speed,
+             self.radio_range) = self._parse_compressed_position(compressed_position)
+
+            self.symbol_table = data[0]
+            self.symbol = data[9]
+
+            self.comment = data[13:]
+            logger.debug("Comment is {}".format(self.comment))
+
+        # If we get this far, then we've parsed the packet
+        return True
+
+    def __repr__(self):
+        if self.source:
+            return "<PositionPacket: {}>".format(self.source)
+        else:
+            return "<PositionPacket>"
+
+
+class MICEPacket(PositionPacket):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _decode_latitude(destination):
+        # parse destination call
+        # The spec is far too convoluted to describe here, but see c10, p44.
+        # Essentially, letters are used to denote the latitude, with different
+        # letters if other flags are flipped on and off
+
+        latitude = ""
+        north_south = ""
+        east_west = ""
+        # TODO - handle status types
+        message_a = ""
+        message_b = ""
+        message_c = ""
+        message_custom = False
+        lng_offset = False
+
+        count = 0
+        for i in destination[0:6]:
+            count += 1
+            if 48 <= ord(i) <= 57:
+                # digit, leave as-is
+                latitude += i
+                enc_set = 1
+            elif 65 <= ord(i) <= 74:
+                latitude += str((ord(i) - 65))
+                enc_set = 2
+            elif 80 <= ord(i) <= 89:
+                latitude += str((ord(i) - 80))
+                enc_set = 3
+            elif i in "KLZ":
+                latitude += " "
+                if i == "K":
+                    enc_set = 2
+                elif i == "L":
+                    enc_set = 1
+                elif i == "Z":
+                    enc_set = 3
+            else:
+                raise ParseError("Unexpected character in Mic-E destination field")
+
+            if count == 1:
+                # first field is changed depending on the message a-bit
+                if enc_set == 1:
+                    message_a = 0
+                elif enc_set == 2:
+                    message_a = 1
+                    message_custom = True
+                elif enc_set == 3:
+                    message_a = 1
+            elif count == 2:
+                # second field is changed depending on the message b-bit
+                if enc_set == 1:
+                    message_b = 0
+                elif enc_set == 2:
+                    message_b = 1
+                    message_custom = True
+                elif enc_set == 3:
+                    message_b = 1
+            elif count == 3:
+                # third field is changed depending on the message c-bit
+                if enc_set == 1:
+                    message_c = 0
+                elif enc_set == 2:
+                    message_c = 1
+                    message_custom = True
+                elif enc_set == 3:
+                    message_c = 1
+            elif count == 4:
+                # fourth field is changed to denote north/south
+                if enc_set == 1:
+                    north_south = "S"
+                else:
+                    north_south = "N"
+
+                # append a . to the latitude here, too
+                latitude += "."
+            elif count == 5:
+                # fifth field is changed to denote the longitude offset
+                if enc_set == 1:
+                    lng_offset = False
+                else:
+                    lng_offset = True
+            elif count == 6:
+                # sixth field is changed to denote east/west
+                if enc_set == 1:
+                    east_west = "E"
+                else:
+                    east_west = "W"
+
+        # TODO
+        if len(destination) > 6:
+            logger.debug("Mic-E destination has SSID: {}".format(destination.split('-')[1]))
+
+        # Convert to actual latitude, and store in the packet
+        decoded_latitude, ambiguity = APRS.decode_uncompressed_latitude(
+            "{}{}".format(latitude, north_south)
+        )
+
+        logger.debug(
+            "After destination field decoding, latitude is {}{} ({} - {}), longitude offset is {}, "
+            "direction is {}, msg a/b/c is {}/{}/{}, msg custom is {}".format(
+                latitude, north_south, decoded_latitude, ambiguity, lng_offset, east_west,
+                message_a, message_b, message_c, message_custom
+            ))
+
+        # Return the decoded latitude, ambiguity, longitude offset, east/west direction and message
+        # bits
+        return (decoded_latitude, ambiguity, lng_offset, east_west, message_a, message_b,
+                message_c, message_custom)
+
+    @staticmethod
+    def _decode_longitude(info, lng_offset, east_west):
+        # The longitude is stored in the first 3 characters of the info field, AFTER
+        # stripping off the data type identifier
+        logger.debug("Info input: {}".format(info))
+        lng_deg = ord(info[1]) - 28
+        lng_min = ord(info[2]) - 28
+        lng_hmin = ord(info[3]) - 28
+
+        logger.debug(
+            "BEFORE: lng_deg: {}, lng_min: {}, lng_hmin: {}".format(lng_deg, lng_min, lng_hmin)
+        )
+
+        # decode the degrees
+        # c10 p48
+        # if the longitude offset was set in the destination field, apply it now
+        if lng_offset:
+            logger.debug("> 100 added to lng_deg")
+            lng_deg += 100
+
+        # if it's now between 180 and 189, subtract 80
+        # if between 190 and 199, subtract 190
+        if 180 <= lng_deg <= 189:
+            logger.debug("> 80 subtracted from lng_deg")
+            lng_deg -= 80
+        elif 190 <= lng_deg <= 199:
+            logger.debug("> 190 subtracted from lng_deg")
+            lng_deg -= 190
+
+        # decode the minutes
+        # if the minutes value is more than 60, subtract 60
+        if lng_min >= 60:
+            logger.debug("> 60 subtracted from lng_min")
+            lng_min -= 60
+
+        logger.debug(
+            "AFTER: lng_deg: {}, lng_min: {}, lng_hmin: {}".format(lng_deg, lng_min, lng_hmin)
+        )
+
+        longitude = APRS.decode_uncompressed_longitude("{}{}.{}{}".format(
+            str(lng_deg).zfill(3),
+            str(lng_min).zfill(2),
+            str(lng_hmin).zfill(2),
+            east_west
+        ))
+        logger.debug(
+            "Longitude is {} {} {} ({})".format(lng_deg, lng_min, lng_hmin, longitude)
+        )
+
+        return longitude
+
+    @staticmethod
+    def _decode_speed_and_course(info):
+        # speed and course is stored in the next 3 characters
+        try:
+            sp = ord(info[4]) - 28
+            dc = ord(info[5]) - 28
+            se = ord(info[6]) - 28
+        except IndexError:
+            raise ParseError("Couldn't parse speed/course in Mic-E packet")
+
+        speed = (sp * 10) + int(dc / 10)
+        course = ((dc % 10) * 100) + se
+
+        if speed >= 800:
+            speed -= 800
+
+        if course >= 400:
+            course -= 400
+
+        # TODO - convert to kmh
+        speed = speed
+        course = course
+        logger.debug("Speed is {} knots, course is {} degrees".format(speed, course))
+
+        return (speed, course)
+
+    def _parse(self):
+
+        # oh dear
+
+        # Decode the latitude, ambiguity, the longitude offset, the east/west direction and the
+        # message bits
+        (self.latitude, self.ambiguity, lng_offset, east_west, message_a, message_b, message_c,
+         message_custom) = self._decode_latitude(self.destination)
+
+        # Decode the longitude, using the longitude offset and east/west direction from the previous
+        # step
+        self.longitude = self._decode_longitude(self.info, lng_offset, east_west)
+
+        # Decode the speed and course from the info field
+        (self.speed, self.course) = self._decode_speed_and_course(self.info)
+
+        # Parse the symbol table and symbol from the info field
+        try:
+            self.symbol = self.info[7]
+            logger.debug("Symbol is {}".format(self.symbol))
+        except IndexError:
+            raise ParseError("Missing symbol", self)
+
+        self.symbol_table = self.info[8]
+        logger.debug("Symbol table is {}".format(self.symbol_table))
+
+        # Next comes either the status text or telemetry (C10 P54)
+        # Telemetry is indicated by setting the first character of the status field to dec 44
+        # (a ',') or the unprintable 29.
+        if len(self.info) >= 10:
+            if ord(self.info[9]) == 44 or ord(self.info[9]) == 29:
+                logger.debug("Packet contains telemetry data")
+                # TODO
+            else:
+                logger.debug("Packet contains status text")
+                status_text = self.info[10:]
+
+                # The status text can contain an altitude value (C10 P55)
+                # It's indicated by the first 4 characters, with the 4th being a '}'
+                if len(status_text) >= 4 and status_text[3] == "}":
+                    logger.debug("Status text contains altitude data")
+
+                    # Decode the altitude
+                    altitude = (
+                        (ord(status_text[0])-33) * 91**2 +
+                        (ord(status_text[1])-33) * 91 +
+                        (ord(status_text[2])-33)
+                    ) - 10000
+
+                    self.altitude = altitude
+                    logger.debug("Altitude is {}m".format(altitude))
+
+                    # The remainder is the status text
+                    self.comment = status_text[4:]
+                    logger.debug("Comment is {}".format(self.comment))
+
+                else:
+                    # TODO - add status_text to packet
+                    self.comment = status_text
+        else:
+            logger.debug("Packet contains no further information.")
+
+    def __repr__(self):
+        if self.source:
+            return "<MICEPacket: {}>".format(self.source)
+        else:
+            return "<MICEPacket>"
+
+
+class StatusPacket(APRSPacket):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._status_message = None
+        self._maidenhead_locator = None
+
+    @property
+    def status_message(self) -> str:
+        return self._status_message
+
+    @status_message.setter
+    def status_message(self, value: str):
+        self._status_message = value
+
+    @property
+    def maidenhead_locator(self) -> str:
+        return self._maidenhead_locator
+
+    @maidenhead_locator.setter
+    def maidenhead_locator(self, value: str):
+        self._maidenhead_locator = value
+
+    def _parse(self):
+        # C16 P80
+        # This one is a mess
+
+        # Maidenhead locators, if present, must be first, and can be 4 or 6 characters.
+        # They must also include a symbol table and symbol code (P81).
+        # Therefore, if the status report matches [A-Z]{2}[0-9]{2}([A-Z]{2})? and a valid symbol
+        # table and id, then it's a Maidenhead locator.
+        # Valid symbol table IDs: /, \, 0-9, A-Z (C20 P91)
+        if len(self.info) >= 7:
+            mh_4 = self.info[1:7]
+            logger.debug("Considering as Maidenhead locator: {}".format(mh_4))
+        else:
+            mh_4 = None
+
+        if len(self.info) >= 9:
+            mh_6 = self.info[1:9]
+            logger.debug("Considering as Maidenhead locator: {}".format(mh_6))
+        else:
+            mh_6 = None
+
+        message = None
+
+        if mh_6 is not None and re.match("[A-Z]{2}[0-9]{2}[A-Z]{2}[/\\\0-9A-Z].", mh_6):
+            # Maidenhead locator (GGnngg)
+            self.maidenhead_locator = mh_6[0:6]
+
+            self.symbol_table = mh_6[6]
+            self.symbol = mh_6[7]
+
+            logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
+                self.maidenhead_locator, self.symbol_table, self.symbol
+            ))
+
+            if len(self.info) != 9:
+                # First character of the text must be " " (C16 P82)
+                if self.info[9] != " ":
+                    # TODO
+                    raise ParseError("Status message is invalid", self)
+                else:
+                    self.status_message = self.info[10:]
+                    logger.debug("Status message is {}".format(self.status_message))
+            else:
+                logger.debug("No status message")
+
+        elif mh_4 is not None and re.match(r'[A-Z]{2}[0-9]{2}[/\\\0-9A-Z].', mh_4):
+            # Maidenhead locator (GGnn)
+            self.maidenhead_locator = mh_4[0:4]
+
+            self.symbol_table = mh_4[4]
+            self.symbol = mh_4[5]
+
+            logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
+                self.maidenhead_locator, self.symbol_table, self.symbol
+            ))
+
+            if len(self.info) != 7:
+
+                # First character of the text must be " " (C16 P82)
+                if self.info[7] != " ":
+                    # TODO
+                    raise ParseError("Status message is invalid", self)
+                else:
+                    self.status_message = self.info[8:]
+                    logger.debug("Status message is {}".format(self.status_message))
+            else:
+                logger.debug("No status message")
+
+        else:
+            # Check for a timestamp
+            if re.match("^[0-9]{6}z", self.info[1:]):
+                self.timestamp = APRS.decode_timestamp(self.info[1:8])
+                # Sanity check the timestamp type - status reports can only use zulu
+                # or local, so if hms is used, throw an error.
+                # if timestamp_type == 'h' and data_type_id == '>':
+                #     logger.error("Timestamp type 'h' cannot be used for status reports")
+                #     raise ParseError("Timestamp type 'h' cannot be used for status reports")
+                self.status_message = self.info[8:]
+                logger.debug("Status message timestamp is {}".format(self.timestamp))
+                logger.debug("Status message is {}".format(self.status_message))
+            else:
+                self.status_message = self.info[1:]
+                logger.debug("No timestamp found")
+                logger.debug("Status message is {}".format(self.status_message))
+
+        # Check for a beam heading and ERP
+        if self.status_message and re.match(r'[\^].{2}', self.status_message[-3:]):
+            logger.debug("Status message heading and power: {}".format(self.status_message[-2:]))
+
+    def __repr__(self):
+        if self.source:
+            return "<StatusPacket: {}>".format(self.source)
+        else:
+            return "<StatusPacket>"
+
+
+class MessagePacket(APRSPacket):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._addressee = None
+        self._message = None
+        self._message_id = None
+        self._bulletin = False
+        self._bulletin_id = None
+        self._announcement_id = None
+        self._group_bulletin = None
+
+    @property
+    def addressee(self) -> str:
+        return self._addressee
+
+    @addressee.setter
+    def addressee(self, value: str):
+        self._addressee = value
+
+    @property
+    def message(self) -> str:
+        return self._message
+
+    @message.setter
+    def message(self, value: str):
+        self._message = value
+
+    @property
+    def message_id(self) -> str:
+        return self._message_id
+
+    @message_id.setter
+    def message_id(self, value: str):
+        self._message_id = value
+
+    @property
+    def bulletin(self) -> bool:
+        return self._bulletin
+
+    @bulletin.setter
+    def bulletin(self, value: bool):
+        self._bulletin = value
+
+    @property
+    def bulletin_id(self) -> int:
+        return self._bulletin_id
+
+    @bulletin_id.setter
+    def bulletin_id(self, value: int):
+        self._bulletin_id = value
+
+    @property
+    def announcement_id(self) -> str:
+        return self._announcement_id
+
+    @announcement_id.setter
+    def announcement_id(self, value: str):
+        self._announcement_id = value
+
+    @property
+    def group_bulletin(self) -> str:
+        return self._group_bulletin
+
+    @group_bulletin.setter
+    def group_bulletin(self, value: str):
+        self._group_bulletin = value
+
+    def _parse(self):
+        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
+        if self.info[10] != ":":
+            raise ParseError("Invalid message packet", self)
+
+        # Split the message
+        addressee = self.info[1:10]
+        self.addressee = addressee.rstrip()
+        message = self.info[11:]
+
+        logger.debug("Message is addressed to {}, message is {}".format(addressee, message))
+
+        # Is this a bulletin/announcement?
+        if addressee[0:3] == "BLN":
+            logger.debug("Message is a bulletin")
+            self.bulletin = True
+
+            if re.match("[0-9]", addressee[3]):
+                if addressee[4:9] == "     ":
+                    # Bulletin
+                    self.bulletin_id = int(addressee[3])
+                    logger.debug("Bulletin {}".format(self.bulletin_id))
+                else:
+                    # Group bulletin
+                    self.group_bulletin = addressee[4:9].rstrip()
+                    self.bulletin_id = int(addressee[3])
+
+                    logger.debug("Group bulletin {} ({})".format(
+                        self.group_bulletin, self.bulletin_id
+                    ))
+
+            elif re.match("[A-Z]", addressee[3]):
+                if addressee[4:9] == "     ":
+                    # Announcement
+                    self.announcement_id = addressee[3]
+                    logger.debug("Announcement {}".format(self.announcement_id))
+                else:
+                    # Incorrectly-formatted bulletin
+                    raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)
+
+            else:
+                # Incorrectly-formatted bulletin
+                raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)
+
+        if '{' in message:
+            # Check for a message ID
+            message, message_id = message.split("{")
+            logger.debug("Message has message ID {}".format(message_id))
+
+            # Message IDs must not be longer than 5 characters (C14 P71)
+            if len(message_id) > 5:
+                raise ParseError("Invalid message ID: {}".format(message_id), self)
+
+            self.message = message
+            self.message_id = message_id
+        else:
+            self.message = message
+
+    def __repr__(self):
+        if self.source:
+            if self.group_bulletin:
+                return "<MessagePacket: {} -> Group Bulletin {} #{}>".format(
+                    self.source, self.group_bulletin, self.bulletin_id
+                )
+            elif self.bulletin_id:
+                return "<MessagePacket: {} -> Bulletin #{}>".format(self.source, self.bulletin_id)
+            elif self.announcement_id:
+                return "<MessagePacket: {} -> Announcement {}>".format(
+                    self.source, self.announcement_id
+                )
+            elif self.addressee:
+                return "<MessagePacket: {} -> {}>".format(self.source, self.addressee)
+            else:
+                return "<MessagePacket: {}>".format(self.source)
+        else:
+            return "<MessagePacket>"
+
+
+class ObjectPacket(APRSPacket):
+
+    def __init__(self):
+        APRSPacket.__init__(self)
+
+    def __repr__(self):
+        if self.source:
+            return "<ObjectPacket: {}>".format(self.source)
+        else:
+            return "<ObjectPacket>"
+
+
+class APRS:
+
+    @staticmethod
+    def decode_uncompressed_latitude(latitude: str) -> Tuple[Union[int, float], int]:
+        """
+        Convert an uncompressed latitude string to a latitude and an ambiguity
+        value.
+
+        Uncompressed latitudes have the format DDMM.HHC, where:-
+        * DD are the degrees
+        * MM are the minutes
+        * HH are the hundredths of minutes
+        * C is either N (for the northern hemisphere) or S (southern)
+
+        MM and HH can be replaced with spaces (" ") to provide positional
+        ambiguity (C6 P24).
+
+        See also APRS101 C6 P23.
+        """
+        logger.debug("Input latitude: {}".format(latitude))
+
+        # Regex match to catch any obviously-invalid latitudes
+        if not re.match(r'^[0-9]{2}[\s0-9]{2}\.[\s0-9]{2}[NS]$', latitude):
+            raise ValueError("Invalid latitude: {}".format(latitude))
+
+        # Determine the level of ambiguity, and replace the spaces with zeroes
+        # See C6 P24
+        ambiguity = latitude.count(' ')
+        latitude = latitude.replace(' ', '0')
+        logger.debug("Ambiguity: {}".format(ambiguity))
+
+        try:
+            # Extract the number of degrees
+            degrees = int(latitude[:2])
+            if degrees > 90:
+                raise ValueError("Invalid degrees: {}".format(degrees))
+
+            logger.debug("Degrees: {}".format(degrees))
+
+            # Extract the number of minutes, convert it to a fraction of a degree,
+            # and round it to 6 decimal places
+            minutes = round(float(latitude[2:-1])/60, 6)
+            logger.debug("Minutes: {}".format(minutes))
+
+            # Extract the north/south
+            direction = latitude[-1]
+            logger.debug("Direction: {}".format(direction))
+
+        except ValueError:
+            raise
+
+        except Exception as e:
+            raise ParseError("Couldn't parse latitude {}: {}".format(
+                latitude, e
+            ))
+
+        # Add the degrees and minutes to give the latitude
+        lat = degrees + minutes
+
+        # If the latitude is south of the equator, make it negative
+        if direction == "S":
+            lat *= -1
+
+        logger.debug("Output latitude: {}, ambiguity: {}".format(
+            lat, ambiguity
+        ))
+        return (lat, ambiguity)
+
+    @staticmethod
+    def decode_uncompressed_longitude(longitude: str, ambiguity: int = 0) -> float:
+        """
+        Convert an uncompressed longitude string to a longitude value, with an
+        optional ambiguity level applied.
+
+        Uncompressed longitudes have the format DDDMM.HHC, where:-
+        * DD are the degrees
+        * MM are the minutes
+        * HH are the hundreths of minutes
+        * C is either W (for west of the meridian) or E (for east)
+
+        Positional ambiguity is handled by the latitude, and so should be
+        honoured regardless of the precision of the longitude given (as per C6 P24).
+        """
+        logger.debug("Input longitude: {}, ambiguity: {}".format(
+            longitude, ambiguity
+        ))
+
+        # Regex match to catch any obviously-invalid longitudes
+        if not re.match(r'^[0-1][0-9]{2}[\s0-9]{2}\.[\s0-9]{2}[EW]$', longitude):
+            raise ValueError("Invalid longitude: {}".format(longitude))
+
+        # If the ambiguity value is more than 0, replace longitude digits with
+        # spaces as required.
+        if 0 < ambiguity <= 4:
+            longitude = longitude.replace(' ', '0')
+        elif ambiguity > 4:
+            raise ValueError("Invalid ambiguity level: {} (maximum is 4)".format(
+                ambiguity
+            ))
+
+        try:
+            # Extract the number of degrees
+            degrees = int(longitude[:3])
+            if degrees > 180:
+                raise ValueError("Invalid degrees: {}".format(degrees))
+
+            logger.debug("Degrees: {}".format(degrees))
+
+            # Since we don't want to replace the '.', if the ambiguity is more than
+            # 2, increment it by 1.
+            if ambiguity > 2:
+                ambiguity_level = ambiguity + 1
+            else:
+                ambiguity_level = ambiguity
+
+            # Extract the number of minutes, and round it to 6 decimal places
+            if ambiguity == 1:
+                mins = longitude[3:-2] + "0"
+            elif ambiguity == 2:
+                mins = longitude[3:-3] + "00"
+            elif ambiguity == 3:
+                mins = longitude[3:-5] + "0.00"
+            elif ambiguity == 4:
+                mins = longitude[3:-6] + "00.00"
+            else:
+                mins = longitude[3:-1]
+
+            minutes = round(float(mins)/60, 6)
+            logger.debug("Ambiguity level: {}".format(ambiguity_level))
+            logger.debug("Minutes: {}".format(minutes))
+
+            # Extract the east/west
+            direction = longitude[-1]
+
+            logger.debug("Direction: {}".format(direction))
+
+        except ValueError:
+            raise
+
+        except Exception as e:
+            raise ParseError("Couldn't parse longitude {}: {}".format(
+                longitude, e
+            ))
+
+        # Add the degrees and minutes to give the longitude
+        lng = degrees + minutes
+
+        # If the longitude is west of the meridian, make it negative
+        if direction == "W":
+            lng *= -1
+
+        logger.debug("Output longitude: {}".format(lng))
+        return lng
+
+    @staticmethod
+    def decode_compressed_latitude(latitude: str) -> float:
+        """
+        Convert a compressed latitude string to a latitude value.
+
+        Compressed latitudes have the format YYYY, where all values are base-91
+        printable ASCII characters.
+
+        See also APRS101 C9 P38.
+        """
+        logger.debug("Input compressed latitude: {}".format(latitude))
+
+        # The compressed latitude string must be 4 characters
+        if len(latitude) != 4:
+            raise ValueError("Input compressed latitude must be 4 characters ({} given)".format(
+                len(latitude)
+            ))
+
+        try:
+            # As per APRS101, if the compressed latitude is y1y2y3y4, the latitude
+            # can be determined with:-
+            # 90 - ((y1-33) x 913 + (y2-33) x 912 + (y3-33) x 91 + y4-33) / 380926
+            lat = 90 - (
+                (ord(latitude[0])-33) * 91**3 +
+                (ord(latitude[1])-33) * 91**2 +
+                (ord(latitude[2])-33) * 91 +
+                (ord(latitude[3])-33)
+            ) / 380926
+        except IndexError:
+            raise ParseError("Couldn't parse compressed latitude {}".format(
+                latitude
+            ))
+
+        # Return latitude
+        logger.debug("Output latitude: {}".format(lat))
+        return lat
+
+    @staticmethod
+    def decode_compressed_longitude(longitude: str) -> float:
+        """
+        Convert a compressed longitutde string latitude value.
+
+        Compressed longitude have the format XXXX, where all values are base-91
+        printable ASCII characters
+
+        See also APRS101 C9 P38
+        """
+        logger.debug("Input compressed longitude: {}".format(longitude))
+
+        try:
+            # If the compressed longitude is x1x2x3x4, the longitude can be determined
+            # with:-
+            # -180 + ((x1-33) x 913 + (x2-33) x 912  + (x3-33) x 91 + x4-33) / 190463
+            lng = -180 + (
+                (ord(longitude[0])-33) * 91**3 +
+                (ord(longitude[1])-33) * 91**2 +
+                (ord(longitude[2])-33) * 91 +
+                (ord(longitude[3])-33)
+            ) / 190463
+        except IndexError:
+            raise ParseError("Couldn't parse compressed longitude {}".format(longitude))
+
+        # Return longitude
+        logger.debug("Output longitude: {}".format(lng))
+        return lng
+
+    @staticmethod
+    def decode_timestamp(raw_timestamp):
+
+        logger.debug("Raw timestamp is {}".format(raw_timestamp))
+        ts = re.match(r'^(\d{6})([\/hz])', raw_timestamp)
+        if ts:
+            timestamp, timestamp_type = ts.groups()
+
+            # Set the timestamp type in the packet
+            if timestamp_type == 'z':
+                timestamp_type = 'zulu'
+                logger.debug("Timestamp is zulu time")
+            elif timestamp_type == '/':
+                timestamp_type = 'local'
+                logger.debug("Timestamp is local time")
+            elif timestamp_type == 'h':
+                timestamp_type = 'hms'
+                logger.debug("Timestamp is hhmmss time")
+            else:
+                logger.error("Invalid timestamp type: {}".format(timestamp_type))
+                raise ParseError("Invalid timestamp type: {}".format(timestamp_type))
+
+            utc = datetime.utcnow()
+
+            if timestamp_type == 'hms':
+                # hhmmss format
+
+                hour = int(timestamp[0:2])
+                minute = int(timestamp[2:4])
+                second = int(timestamp[4:6])
+
+                try:
+                    ts = datetime(utc.year, utc.month, utc.day, hour, minute, second)
+                except ValueError as e:
+                    raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
+
+                # check it's not in the future
+                if ts > utc:
+                    # time is in the future, so go back a day
+                    ts -= timedelta(days=1)
+
+                # Convert to seconds
+                timestamp = int(ts.timestamp())
+                logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))
+
+            elif timestamp_type == 'zulu' or timestamp_type == 'local':
+                if timestamp_type == 'local':
+                    # assume local time is zulu time
+                    # NOTE: this is against the spec, but without knowing the local
+                    # timezone, it's impossible to work out. The spec (ch 6, page
+                    # 22) states "It is recommended that future APRS implementations
+                    # only transmit zulu format on the air", so hopefully this
+                    # shouldn't be a problem in reality.
+                    logger.warn("Local time specified in timestamp, assuming UTC.")
+
+                # ddhhmm
+                day = int(timestamp[0:2])
+                hour = int(timestamp[2:4])
+                minute = int(timestamp[4:6])
+
+                # TODO - handle broken timestamps a bit nicer
+                try:
+                    ts = datetime(utc.year, utc.month, day, hour, minute, 0)
+                except ValueError:
+                    raise ParseError("Error parsing timestamp: {}".format(timestamp))
+                    # p.timestamp = 0
+                    # return
+
+                # check it's not in the future
+                if ts > utc:
+                    logger.debug("Timestamp day in previous month.")
+                    # time is in the future, so go back a month
+                    # timedelta doesn't support subtracting months, so here be
+                    # dirty hacks.
+                    if 1 < ts.month <= 12:
+                        month = ts.month - 1
+                        ts = datetime(utc.year, month, day, hour, minute, 0)
+                    elif ts.month == 1:
+                        year = ts.year - 1
+                        month = 12
+                        ts = datetime(year, month, day, hour, minute, 0)
+                    else:
+                        raise ParseError("Error parsing ddhhmm timestamp: {}".format(timestamp))
+
+                # Convert to seconds
+                timestamp = int(ts.timestamp())
+                logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))
+
+            return timestamp
+
+        else:
+            raise ParseError("No timestamp found in packet")
+
+    @staticmethod
+    def parse(packet: str = None) -> "APRSPacket":
+
+        try:
+            # Parse out the source, destination, path and information fields
+            (source, destination, path, info) = re.match(
+                r'([\w\d\-]+)>([\w\d\-]+),([\w\d\-\*\,]+):(.*)',
+                packet
+            ).groups()
+        except AttributeError:
+            raise ParseError("Could not parse packet details", packet)
+
+        # Create a checksum, to provide a quick comparison against other packets
+        checksum = md5((source + info).encode()).hexdigest()
+        logger.debug("Packet checksum is {}".format(checksum))
+
+        logger.debug("Raw packet: {}".format(packet))
+
+        # Do some basic sanity checking
+        # The source and destination fields should be a maximum of 9 characters
+        logger.debug("Destination length is {}".format(len(destination)))
+        if len(source) > 9:
+            raise ParseError("Source address is longer than 9 characters", packet)
+        elif len(destination) > 9:
+            raise ParseError("Destination address is longer than 9 characters", packet)
+
+        # The destination field should be upper case
+        if not re.match(r'^[A-Z0-9]{1,6}(\-[0-9]{1,2})?$', destination):
+            raise ParseError("Destination address is invalid", packet)
+
+        # Parse the information field
+        data_type_id = info[0]
+
+        if data_type_id in '!/=@':
+            logger.debug("Packet is a position packet")
+            p = PositionPacket()
+
+            if len(info) < 5:
+                # TODO - handle this properly
+                logger.error("Packet is too short.")
+
+        elif data_type_id in "`'":
+            logger.debug("Packet is a Mic-E packet")
+            p = MICEPacket()
+
+        elif data_type_id == ";":
+            logger.debug("Packet is an object packet")
+            p = ObjectPacket()
+
+        elif data_type_id == ":":
+            logger.debug("Packet is a message packet")
+            p = MessagePacket()
+
+        elif data_type_id == "T":
+            raise UnsupportedError("Unsupported data type: 'T' (Telemetry) - C13 P68")
+
+        elif data_type_id == ">":
+            logger.debug("Packet is a status packet")
+            p = StatusPacket()
+
+        elif data_type_id == "<":
+            raise UnsupportedError("Unsupported data type: '<' (Station Capabilities) - C15 P77")
+
+        elif 0 <= info.find('!') <= 40:
+            # As per the spec (Ch 5, page 18) position-without-timestamp packets may
+            # have the '!' located anywhere up to the 40th character in the
+            # information field. If we're here, test for that now.
+            logger.debug("Found ! in information field, parsing as position packet")
+            p = PositionPacket()
+
+        else:
+            logger.error("Unknown data type: {} (raw: {})".format(data_type_id, packet))
+            # Return a generic APRS Packet with the basic info
+            p = APRSPacket()
+
+        p.source = source
+        p.destination = destination
+        p.path = path
+        p.info = info
+        p.checksum = checksum
+        p.data_type_id = data_type_id
+        p.raw = packet
+
+        p._parse()
+
+        return p
+
