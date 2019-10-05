@@ -224,7 +224,7 @@ def test_position_packet():
 
     # TODO - fix longitude and speed
     raw_packets = [
-        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=/5L!!<*e7>7P[Test packet', 49.5, -72.75000393777269),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=/5L!!<*e7>7P[Test packet', 49.5, -72.750004),
     ]
 
     for raw in raw_packets:

@@ -5,8 +5,9 @@ import logging
 
 from hashlib import md5
 from datetime import datetime, timedelta
+from geopy.point import Point
 
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -164,30 +165,47 @@ class PositionPacket(APRSPacket):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._latitude = None
-        self._longitude = None
+        self._point = Point()
         self._ambiguity = None
         self._course = None
         self._speed = None
-        self._altitude = None
-        self._radio_range = None
         self._comment = None
+
+        # PHG/RNG/DFS/BRG/NRQ
+        self._power = None
+        self._height = None
+        self._gain = None
+        self._directivity = None
+        self._radio_range = None
+        self._strength = None
+        self._bearing = None
+        self._number = None
+        self._df_range = None
+        self._quality = None
+
+    @property
+    def point(self) -> Point:
+        return self._point
+
+    @point.setter
+    def point(self, value: Point):
+        self._point = value
 
     @property
     def latitude(self) -> float:
-        return self._latitude
+        return round(self._point.latitude, 6)
 
     @latitude.setter
     def latitude(self, value: float):
-        self._latitude = value
+        self._point.latitude = value
 
     @property
     def longitude(self) -> float:
-        return self._longitude
+        return round(self._point.longitude, 6)
 
     @longitude.setter
     def longitude(self, value: float):
-        self._longitude = value
+        self._point.longitude = value
 
     @property
     def ambiguity(self) -> int:
@@ -215,19 +233,11 @@ class PositionPacket(APRSPacket):
 
     @property
     def altitude(self) -> int:
-        return self._altitude
+        return self._point.altitude
 
     @altitude.setter
     def altitude(self, value: int):
-        self._altitude = value
-
-    @property
-    def radio_range(self) -> int:
-        return self._radio_range
-
-    @radio_range.setter
-    def radio_range(self, value: int):
-        self._radio_range = value
+        self._point.altitude = value
 
     @property
     def comment(self) -> str:
@@ -236,6 +246,109 @@ class PositionPacket(APRSPacket):
     @comment.setter
     def comment(self, value: str):
         self._comment = value
+
+    @property
+    def power(self) -> int:
+        """Get the power (in watts)"""
+        return self._power
+
+    @power.setter
+    def power(self, value: int):
+        """Set the power (in watts)"""
+        self._power = value
+
+    @property
+    def height(self) -> int:
+        """Get the antenna height above average terrain (in feet)"""
+        return self._height
+
+    @height.setter
+    def height(self, value: int):
+        """Set the antenna height above average terrain (in feet)"""
+        self._height = value
+
+    @property
+    def gain(self) -> int:
+        """Get the antenna gain (in dB)"""
+        return self._gain
+
+    @gain.setter
+    def gain(self, value: int):
+        """Set the antenna gain (in dB)"""
+        self._gain = value
+
+    @property
+    def directivity(self) -> int:
+        """Get the antenna directivity (in degrees)"""
+        return self._directivity
+
+    @directivity.setter
+    def directivity(self, value: int):
+        """Set the antenna directivity (in degrees)"""
+        self._directivity = value
+
+    @property
+    def radio_range(self) -> int:
+        """Get the radio range (in miles)"""
+        return self._radio_range
+
+    @radio_range.setter
+    def radio_range(self, value: int):
+        """Set the radio range (in miles)"""
+        self._radio_range = value
+
+    @property
+    def strength(self) -> int:
+        """Get the DF signal strength (in S-points)"""
+        return self._strength
+
+    @strength.setter
+    def strength(self, value: int):
+        """Set the DF signal strength (in S-points)"""
+        self._strength = value
+
+    @property
+    def bearing(self) -> int:
+        """Get the DF signal bearing (in degrees)"""
+        return self._bearing
+
+    @bearing.setter
+    def bearing(self, value: int):
+        """Set the DF signal bearing (in degrees)"""
+        self._bearing = value
+
+    @property
+    def number(self) -> float:
+        """Get the DF hit ratio percentage"""
+        return self._number
+
+    @number.setter
+    def number(self, value: float):
+        """Set the DF hit ratio percentage"""
+        # TODO - Ensure this is a multiple of 12.5%
+        self._number = value
+
+    @property
+    def df_range(self) -> int:
+        """Get the DF range (in miles)"""
+        return self._df_range
+
+    @df_range.setter
+    def df_range(self, value: int):
+        """Set the DF range (in miles)"""
+        self._df_range = value
+
+    @property
+    def quality(self) -> int:
+        """Get the DF bearing accuracy (in degrees)"""
+        return self._quality
+
+    @quality.setter
+    def quality(self, value: int):
+        """Set the DF bearing accuracy (in degrees)"""
+        # TODO - Ensure that this is valid
+        self._quality = value
+
 
     @staticmethod
     def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
@@ -297,7 +410,7 @@ class PositionPacket(APRSPacket):
         elif 0 <= (ord(data[10])-33) <= 89:
             # course/speed
             course = (ord(data[10])-33) * 4
-            speed = 1.08 ** (ord(data[11])-33) - 1
+            speed = round((1.08 ** (ord(data[11])-33) - 1), 1)
 
             logger.debug("Course: {} Speed: {}".format(course, speed))
 
@@ -416,8 +529,60 @@ class PositionPacket(APRSPacket):
             (self.latitude, self.longitude, self.ambiguity, self.symbol_table, self.symbol
              ) = self._parse_uncompressed_position(data)
             if len(data) > 19:
-                (self.phg, self.radio_range, self.dfs, self.course, self.speed, self.altitude,
-                 self.comment) = self._parse_data(data[19:])
+                (phg, radio_range, dfs, self.course, self.speed, self.altitude,
+                 comment) = self._parse_data(data[19:])
+
+                if self.symbol_table == "/" and self.symbol == "\\":
+                    # If the symbol table is /, and the symbol ID is \, it implies a DF report
+                    # 26th and 30th characters should be /
+                    logger.debug("Symbol table and symbol indicates a DF report")
+
+                    if len(comment) < 8:
+                        raise ParseError("Missing DF values", self)
+
+                    if comment[0] != "/" or comment[4] != "/":
+                        raise ParseError("Invalid DF values", self)
+
+                    # Extract the bearing
+                    self.bearing = comment[1:4]
+                    logger.debug(f"DF bearing is {self.bearing} degrees")
+
+                    # Decode the NRQ value
+                    (self.number, self.df_range, self.quality) = APRS.decode_nrq(comment[5:8])
+
+                    # Strip the bearing/NRQ value from the comment
+                    self.comment = comment[8:]
+
+                elif self.symbol_table in ["/", "\\"] and self.symbol == "_":
+                    # / or \, and _ for the symbol table and symbol implies a weather report
+                    logger.debug("Symbol table and symbol indicates a weather report")
+
+                elif phg:
+                    # Decode the power, height, gain and directivity values
+                    (self.power, self.height, self.gain, self.directivity) = APRS.decode_phg(phg)
+
+                    # The PHG value has already been stripped from the comment
+                    self.comment = comment
+
+                elif radio_range:
+                    # The radio range is specified as 4 digits, which denote the range in miles
+                    self.radio_range = int(radio_range)
+                    logger.debug(f"Radio range is {radio_range} miles")
+
+                    # The PHG value has already been stripped from the comment
+                    self.comment = comment
+
+                elif dfs:
+                    # Decode the signal strength, height, gain and directivity values
+                    (self.strength, self.height, self.gain, self.directivity) = APRS.decode_dfs(dfs)
+
+                    # The PHG value has already been stripped from the comment
+                    self.comment = comment
+
+                else:
+                    # No additional data found
+                    self.comment = comment
+
         else:
             compressed_position = data[0:13]
             (self.latitude, self.longitude, self.altitude, self.course, self.speed,
@@ -1290,6 +1455,165 @@ class APRS:
 
         else:
             raise ParseError("No timestamp found in packet")
+
+    @staticmethod
+    def decode_phg(phg: str) -> Tuple[int, int, int, Optional[int]]:
+        """
+        Parse a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
+        individual values.
+
+        The PHG extension provides a way of specifying approximate values for:-
+        * Power (in watts)
+        * Height above average local terrain (in feet)
+        * Antenna gain (in dB)
+        * Directivity (in degrees)
+
+        PHG values are 4 characters long, and each digit is responsible for one of the above values.
+        As per the APRS spec, the height value can be any ASCII character from 0 upwards.
+
+        See APRS101 C7 P28
+        """
+
+        # Ensure this is a valid PHG value
+        if not re.match(r'^[0-9]\w[0-9]{2}$', phg):
+            raise ValueError(f"Invalid PHG value: {phg}")
+
+        # Decode the power value
+        # To get this, we square the value
+        power = int(phg[0])**2
+        logger.debug(f"Power is {power} watts")
+
+        # Decode the height value
+        # To get this, we raise 2 to the power of the ASCII value of the character, minus 48, then
+        # times it by 10
+        height = (2 ** (ord(phg[1])-48)) * 10
+        logger.debug(f"Height is {height} feet")
+
+        # Decode the gain value
+        # The gain is just the digit, in dB
+        gain = int(phg[2])
+        logger.debug(f"Gain is {gain}dB")
+
+        # Decode the directivity
+        # The directivity is 360 divided by 8, times the directivity value
+        # A value of 0 implies an omnidirectional antenna
+        if int(phg[3]) == 0:
+            directivity = None
+            logger.debug(f"Directivity is omnidirectional")
+        else:
+            directivity = (360/8) * int(phg[3])
+            logger.debug(f"Directivity is {directivity} degrees")
+
+        return (power, height, gain, directivity)
+
+    @staticmethod
+    def decode_dfs(dfs: str) -> Tuple[int, int, int, Optional[int]]:
+        """
+        Parse a DFS (Omni-DF Signal Strength) value and return the individual values.
+
+        The DFS extension provides a way of specifying approximate values for:-
+        * Received signal strength (in S-points)
+        * Antenna height above average terrain (in feet)
+        * Antenna gain (in dB)
+        * Directivity (in degrees)
+
+        Like PHG values, DFS values are 4 characters long, and each digit is responsible for one of
+        the above values. The APRS spec does not specify it, but it is assumed that - like the PHG
+        value - the antenna height can be any ASCII value from 0 upwards.
+
+        See APRS101 C7 P29
+        """
+
+        # Ensure this is a valid DFS value
+        if not re.match(r'^[0-9]\w[0-9]{2}$', dfs):
+            raise ValueError(f"Invalid DFS value: {dfs}")
+
+        # Decode the strength value
+        # This just the digit, in dB
+        strength = int(dfs[0])
+        logger.debug(f"Strength is S{strength}")
+
+        # Decode the height value
+        # To get this, we raise 2 to the power of the ASCII value of the character, minus 48, then
+        # times it by 10
+        height = (2 ** (ord(dfs[1])-48)) * 10
+        logger.debug(f"Height is {height} feet")
+
+        # Decode the gain value
+        # The gain is just the digit, in dB
+        gain = int(dfs[2])
+        logger.debug(f"Gain is {gain}dB")
+
+        # Decode the directivity
+        # The directivity is 360 divided by 8, times the directivity value
+        # A value of 0 implies an omnidirectional antenna
+        if int(dfs[3]) == 0:
+            directivity = None
+            logger.debug(f"Directivity is omnidirectional")
+        else:
+            directivity = (360/8) * int(dfs[3])
+            logger.debug(f"Directivity is {directivity} degrees")
+
+        return (strength, height, gain, directivity)
+
+    @staticmethod
+    def decode_nrq(nrq: str) -> Tuple[Optional[Union[float, str]], Optional[int], Optional[int]]:
+        """
+        Parse an NRQ (Number/Range/Quality) value and return the individual values.
+
+        For direction-finding reports, the NRQ value provides:-
+        * The number of hits per period relative to the length of the time period (as a percentage)
+        * The range (in miles)
+        * The bearing accuracy (in degrees)
+
+        NRQ values are 3 digits long, and all digits from 0 to 9. An 'N' value of 0 implies that the
+        rest of the values are meaningless. An 'N' value of 9 indicates that the report is manual.
+
+        The bearing accuracy represents the degree of accuracy, so a 'Q' value of 3 is 64, meaning
+        that the accuracy is to less than 64 degrees.
+
+        See APRS101 C7 P30
+        """
+
+        # Ensure this is a valid NRQ value
+        if not re.match(r'^[0-9]{3}$', nrq):
+            raise ValueError(f"Invalid NRQ value: {nrq}")
+
+        # Decode the number of hits
+        # We can get this by dividing 100 / 8, then multiplying by the value
+        if nrq[0] == "0":
+            number = None
+            rng = None
+            quality = None
+        else:
+            if nrq[0] == "9":
+                number = "manual"
+                logger.debug(f"NRQ value is manually reported")
+            else:
+                number = (100/8) * int(nrq[0])
+                logger.debug(f"Number of hits is {number}%")
+
+            # The range is 2 to the power of the range value
+            rng = 2 ** int(nrq[1])
+            logger.debug(f"Range is {rng} miles")
+
+            # The quality is in degrees. 9 through 3 double the value each time, starting at 1.
+            # 2 and 1 are 120 and 240 respectively. 0 implies a useless quality level.
+            if int(nrq[2]) > 2:
+                quality = 2 ** (9-int(nrq[2]))
+            elif int(nrq[2]) == 2:
+                quality = 120
+            elif int(nrq[2]) == 1:
+                quality = 240
+            else:
+                quality = None
+
+            if quality:
+                logger.debug(f"Bearing accuracy is < {quality} degrees")
+            else:
+                logger.debug("Bearing accuracy is useless")
+
+        return (number, rng, quality)
 
     @staticmethod
     def parse(packet: str = None) -> "APRSPacket":
