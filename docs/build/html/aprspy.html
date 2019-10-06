@@ -1,0 +1,481 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>aprspy &#8212; aprspy  documentation</title>
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Welcome to aprspy’s documentation!" href="index.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to aprspy’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">aprspy  documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="aprspy">
+<h1>aprspy<a class="headerlink" href="#aprspy" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="aprspy.APRS">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">APRS</code><a class="headerlink" href="#aprspy.APRS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main APRS class.</p>
+<p>This class provides functions for parsing and decoding different kinds of APRS packets.
+Packet type-specific functions are defined under the different APRSPacket subclasses.</p>
+<dl class="method">
+<dt id="aprspy.APRS.decode_compressed_latitude">
+<em class="property">static </em><code class="sig-name descname">decode_compressed_latitude</code><span class="sig-paren">(</span><em class="sig-param">latitude: str</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_compressed_latitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert a compressed latitude string to a latitude value.</p>
+<p>Compressed latitudes have the format YYYY, where all values are base-91
+printable ASCII characters.</p>
+<p>See also APRS 1.01 C9 P38.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_compressed_longitude">
+<em class="property">static </em><code class="sig-name descname">decode_compressed_longitude</code><span class="sig-paren">(</span><em class="sig-param">longitude: str</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_compressed_longitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert a compressed longitutde string latitude value.</p>
+<p>Compressed longitude have the format XXXX, where all values are base-91
+printable ASCII characters</p>
+<p>See also APRS 1.01 C9 P38</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_dfs">
+<em class="property">static </em><code class="sig-name descname">decode_dfs</code><span class="sig-paren">(</span><em class="sig-param">dfs: str</em><span class="sig-paren">)</span> &#x2192; Tuple[int, int, int, Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_dfs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse a DFS (Omni-DF Signal Strength) value and return the individual values.</p>
+<dl class="simple">
+<dt>The DFS extension provides a way of specifying approximate values for:-</dt><dd><ul class="simple">
+<li><p>Received signal strength (in S-points)</p></li>
+<li><p>Antenna height above average terrain (in feet)</p></li>
+<li><p>Antenna gain (in dB)</p></li>
+<li><p>Directivity (in degrees)</p></li>
+</ul>
+</dd>
+</dl>
+<p>Like PHG values, DFS values are 4 characters long, and each digit is responsible for one of
+the above values. The APRS spec does not specify it, but it is assumed that - like the PHG
+value - the antenna height can be any ASCII value from 0 upwards.</p>
+<p>See APRS 1.01 C7 P29</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_nrq">
+<em class="property">static </em><code class="sig-name descname">decode_nrq</code><span class="sig-paren">(</span><em class="sig-param">nrq: str</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[float, str, None], Optional[int], Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_nrq" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse an NRQ (Number/Range/Quality) value and return the individual values.</p>
+<dl class="simple">
+<dt>For direction-finding reports, the NRQ value provides:-</dt><dd><ul class="simple">
+<li><p>The number of hits per period relative to the length of the time period (as a percentage)</p></li>
+<li><p>The range (in miles)</p></li>
+<li><p>The bearing accuracy (in degrees)</p></li>
+</ul>
+</dd>
+</dl>
+<p>NRQ values are 3 digits long, and all digits from 0 to 9. An ‘N’ value of 0 implies that the
+rest of the values are meaningless. An ‘N’ value of 9 indicates that the report is manual.</p>
+<p>The bearing accuracy represents the degree of accuracy, so a ‘Q’ value of 3 is 64, meaning
+that the accuracy is to less than 64 degrees.</p>
+<p>See APRS 1.01 C7 P30</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_phg">
+<em class="property">static </em><code class="sig-name descname">decode_phg</code><span class="sig-paren">(</span><em class="sig-param">phg: str</em><span class="sig-paren">)</span> &#x2192; Tuple[int, int, int, Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_phg" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
+individual values.</p>
+<dl class="simple">
+<dt>The PHG extension provides a way of specifying approximate values for:-</dt><dd><ul class="simple">
+<li><p>Power (in watts)</p></li>
+<li><p>Height above average local terrain (in feet)</p></li>
+<li><p>Antenna gain (in dB)</p></li>
+<li><p>Directivity (in degrees)</p></li>
+</ul>
+</dd>
+</dl>
+<p>PHG values are 4 characters long, and each digit is responsible for one of the above values.
+As per the APRS spec, the height value can be any ASCII character from 0 upwards.</p>
+<p>See APRS 1.01 C7 P28</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_timestamp">
+<em class="property">static </em><code class="sig-name descname">decode_timestamp</code><span class="sig-paren">(</span><em class="sig-param">raw_timestamp</em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#aprspy.APRS.decode_timestamp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Decode a timestamp.</p>
+<dl class="simple">
+<dt>Timestamps can take a number of different forms:-</dt><dd><ul class="simple">
+<li><p>Zulu, identified with a trailing ‘z’, which refers to zulu time</p></li>
+<li><p>Local, identified with a trailing ‘/’, which has no timezone information</p></li>
+<li><p>A hour/minute/second timestamp without any date information</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_uncompressed_latitude">
+<em class="property">static </em><code class="sig-name descname">decode_uncompressed_latitude</code><span class="sig-paren">(</span><em class="sig-param">latitude: str</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[int, float], int]<a class="headerlink" href="#aprspy.APRS.decode_uncompressed_latitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert an uncompressed latitude string to a latitude and an ambiguity
+value.</p>
+<dl class="simple">
+<dt>Uncompressed latitudes have the format DDMM.HHC, where:-</dt><dd><ul class="simple">
+<li><p>DD are the degrees</p></li>
+<li><p>MM are the minutes</p></li>
+<li><p>HH are the hundredths of minutes</p></li>
+<li><p>C is either N (for the northern hemisphere) or S (southern)</p></li>
+</ul>
+</dd>
+</dl>
+<p>MM and HH can be replaced with spaces (” “) to provide positional
+ambiguity (C6 P24).</p>
+<p>See also APRS 1.01 C6 P23.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.decode_uncompressed_longitude">
+<em class="property">static </em><code class="sig-name descname">decode_uncompressed_longitude</code><span class="sig-paren">(</span><em class="sig-param">longitude: str</em>, <em class="sig-param">ambiguity: int = 0</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_uncompressed_longitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert an uncompressed longitude string to a longitude value, with an
+optional ambiguity level applied.</p>
+<dl class="simple">
+<dt>Uncompressed longitudes have the format DDDMM.HHC, where:-</dt><dd><ul class="simple">
+<li><p>DD are the degrees</p></li>
+<li><p>MM are the minutes</p></li>
+<li><p>HH are the hundreths of minutes</p></li>
+<li><p>C is either W (for west of the meridian) or E (for east)</p></li>
+</ul>
+</dd>
+</dl>
+<p>Positional ambiguity is handled by the latitude, and so should be
+honoured regardless of the precision of the longitude given (as per C6 P24).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.parse">
+<em class="property">static </em><code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param">packet: str = None</em><span class="sig-paren">)</span> &#x2192; aprspy.APRSPacket<a class="headerlink" href="#aprspy.APRS.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse an APRS packet, and return a subclass of APRSPacket appropriate for the packet type.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="aprspy.APRSPacket">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">APRSPacket</code><span class="sig-paren">(</span><em class="sig-param">source: str = None</em>, <em class="sig-param">destination: str = None</em>, <em class="sig-param">path: str = None</em>, <em class="sig-param">info: str = None</em>, <em class="sig-param">raw: str = None</em>, <em class="sig-param">timestamp: str = None</em>, <em class="sig-param">data_type_id: str = None</em>, <em class="sig-param">symbol_table: str = None</em>, <em class="sig-param">symbol: str = None</em><span class="sig-paren">)</span><a class="headerlink" href="#aprspy.APRSPacket" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generic base class for APRS packets.</p>
+<p>This is the base class for representing an APRS packet. Anything that is common to all packets
+is defined in here.</p>
+<dl class="method">
+<dt id="aprspy.APRSPacket.data_type_id">
+<em class="property">property </em><code class="sig-name descname">data_type_id</code><a class="headerlink" href="#aprspy.APRSPacket.data_type_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the data type ID of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.destination">
+<em class="property">property </em><code class="sig-name descname">destination</code><a class="headerlink" href="#aprspy.APRSPacket.destination" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the destination address of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.info">
+<em class="property">property </em><code class="sig-name descname">info</code><a class="headerlink" href="#aprspy.APRSPacket.info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the information field of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.path">
+<em class="property">property </em><code class="sig-name descname">path</code><a class="headerlink" href="#aprspy.APRSPacket.path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the path of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.raw">
+<em class="property">property </em><code class="sig-name descname">raw</code><a class="headerlink" href="#aprspy.APRSPacket.raw" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the raw data of the packet in TNC2 format</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.source">
+<em class="property">property </em><code class="sig-name descname">source</code><a class="headerlink" href="#aprspy.APRSPacket.source" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the source address of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.symbol">
+<em class="property">property </em><code class="sig-name descname">symbol</code><a class="headerlink" href="#aprspy.APRSPacket.symbol" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the symbol of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.symbol_table">
+<em class="property">property </em><code class="sig-name descname">symbol_table</code><a class="headerlink" href="#aprspy.APRSPacket.symbol_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the symbol table of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRSPacket.timestamp">
+<em class="property">property </em><code class="sig-name descname">timestamp</code><a class="headerlink" href="#aprspy.APRSPacket.timestamp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the timestamp of the packet</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="aprspy.PositionPacket">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">PositionPacket</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#aprspy.PositionPacket" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class to represent various kinds of position packets.</p>
+<p>This class represents packets which provide position information - including weather reports.</p>
+<dl class="method">
+<dt id="aprspy.PositionPacket.altitude">
+<em class="property">property </em><code class="sig-name descname">altitude</code><a class="headerlink" href="#aprspy.PositionPacket.altitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the altitude of the station</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.ambiguity">
+<em class="property">property </em><code class="sig-name descname">ambiguity</code><a class="headerlink" href="#aprspy.PositionPacket.ambiguity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the ambiguity level of the packet</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.bearing">
+<em class="property">property </em><code class="sig-name descname">bearing</code><a class="headerlink" href="#aprspy.PositionPacket.bearing" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the DF signal bearing (in degrees)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.comment">
+<em class="property">property </em><code class="sig-name descname">comment</code><a class="headerlink" href="#aprspy.PositionPacket.comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the packet’s comment</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.course">
+<em class="property">property </em><code class="sig-name descname">course</code><a class="headerlink" href="#aprspy.PositionPacket.course" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the course of the station</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.df_range">
+<em class="property">property </em><code class="sig-name descname">df_range</code><a class="headerlink" href="#aprspy.PositionPacket.df_range" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the DF range (in miles)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.directivity">
+<em class="property">property </em><code class="sig-name descname">directivity</code><a class="headerlink" href="#aprspy.PositionPacket.directivity" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the antenna directivity (in degrees)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.gain">
+<em class="property">property </em><code class="sig-name descname">gain</code><a class="headerlink" href="#aprspy.PositionPacket.gain" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the antenna gain (in dB)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.height">
+<em class="property">property </em><code class="sig-name descname">height</code><a class="headerlink" href="#aprspy.PositionPacket.height" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the antenna height above average terrain (in feet)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.latitude">
+<em class="property">property </em><code class="sig-name descname">latitude</code><a class="headerlink" href="#aprspy.PositionPacket.latitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the latitude of the station</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.longitude">
+<em class="property">property </em><code class="sig-name descname">longitude</code><a class="headerlink" href="#aprspy.PositionPacket.longitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the longitude of the station</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.number">
+<em class="property">property </em><code class="sig-name descname">number</code><a class="headerlink" href="#aprspy.PositionPacket.number" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the DF hit ratio percentage</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.point">
+<em class="property">property </em><code class="sig-name descname">point</code><a class="headerlink" href="#aprspy.PositionPacket.point" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a point representing the latitude, longitude and optionally the altitude</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.power">
+<em class="property">property </em><code class="sig-name descname">power</code><a class="headerlink" href="#aprspy.PositionPacket.power" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the power (in watts)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.quality">
+<em class="property">property </em><code class="sig-name descname">quality</code><a class="headerlink" href="#aprspy.PositionPacket.quality" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the DF bearing accuracy (in degrees)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.radio_range">
+<em class="property">property </em><code class="sig-name descname">radio_range</code><a class="headerlink" href="#aprspy.PositionPacket.radio_range" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the radio range (in miles)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.speed">
+<em class="property">property </em><code class="sig-name descname">speed</code><a class="headerlink" href="#aprspy.PositionPacket.speed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the speed of the station</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.PositionPacket.strength">
+<em class="property">property </em><code class="sig-name descname">strength</code><a class="headerlink" href="#aprspy.PositionPacket.strength" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the DF signal strength (in S-points)</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="aprspy.MICEPacket">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">MICEPacket</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#aprspy.MICEPacket" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class to represent Mic-E encoded position packets.</p>
+<p>Mic-E packets encode position data in both the APRS destination and information fields, enabling
+a large amount of information to be conveyed in a single packet.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="aprspy.StatusPacket">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">StatusPacket</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#aprspy.StatusPacket" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class to represent status report packets.</p>
+<p>As per APRS 1.01, status reports “announce(s) the station’s current mission or any other single
+line status to everyone”. The data type identifier for status reports is “&gt;”.</p>
+<p>See APRS 1.01 C16 P80</p>
+<dl class="method">
+<dt id="aprspy.StatusPacket.maidenhead_locator">
+<em class="property">property </em><code class="sig-name descname">maidenhead_locator</code><a class="headerlink" href="#aprspy.StatusPacket.maidenhead_locator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the Maidenhead locator (if set)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.StatusPacket.status_message">
+<em class="property">property </em><code class="sig-name descname">status_message</code><a class="headerlink" href="#aprspy.StatusPacket.status_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the status message</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="aprspy.MessagePacket">
+<em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">MessagePacket</code><span class="sig-paren">(</span><em class="sig-param">*args</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#aprspy.MessagePacket" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class to represent APRS message packets.</p>
+<p>APRS message packets can be from one station to another, or general bulletins or announcements
+which are intended for a wider audience.</p>
+<p>See also APRS 1.01 C14 P71</p>
+<dl class="method">
+<dt id="aprspy.MessagePacket.addressee">
+<em class="property">property </em><code class="sig-name descname">addressee</code><a class="headerlink" href="#aprspy.MessagePacket.addressee" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the addressee of the message</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.MessagePacket.announcement_id">
+<em class="property">property </em><code class="sig-name descname">announcement_id</code><a class="headerlink" href="#aprspy.MessagePacket.announcement_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the announcement ID</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.MessagePacket.bulletin_id">
+<em class="property">property </em><code class="sig-name descname">bulletin_id</code><a class="headerlink" href="#aprspy.MessagePacket.bulletin_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the bulletin ID</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.MessagePacket.group_bulletin">
+<em class="property">property </em><code class="sig-name descname">group_bulletin</code><a class="headerlink" href="#aprspy.MessagePacket.group_bulletin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the group bulletin name</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.MessagePacket.message">
+<em class="property">property </em><code class="sig-name descname">message</code><a class="headerlink" href="#aprspy.MessagePacket.message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the message</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.MessagePacket.message_id">
+<em class="property">property </em><code class="sig-name descname">message_id</code><a class="headerlink" href="#aprspy.MessagePacket.message_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the message ID</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to aprspy’s documentation!</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/aprspy.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to aprspy’s documentation!"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">aprspy  documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, Andy Smith.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.2.0.
+    </div>
+  </body>
+</html>
