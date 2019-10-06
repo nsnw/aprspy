@@ -33,6 +33,12 @@ class UnsupportedError(Exception):
 
 
 class APRSPacket:
+    """
+    Generic base class for APRS packets.
+
+    This is the base class for representing an APRS packet. Anything that is common to all packets
+    is defined in here.
+    """
 
     def __init__(self, source: str = None, destination: str = None, path: str = None,
                  info: str = None, raw: str = None, timestamp: str = None, data_type_id: str = None,
@@ -162,6 +168,11 @@ class APRSPacket:
 
 
 class PositionPacket(APRSPacket):
+    """
+    Class to represent various kinds of position packets.
+
+    This class represents packets which provide position information - including weather reports.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -185,66 +196,82 @@ class PositionPacket(APRSPacket):
 
     @property
     def point(self) -> Point:
+        """Get a point representing the latitude, longitude and optionally the altitude"""
         return self._point
 
     @point.setter
     def point(self, value: Point):
+        """Set a point representing the latitude, longitude and optionally the altitude"""
         self._point = value
 
     @property
     def latitude(self) -> float:
+        """Get the latitude of the station"""
         return round(self._point.latitude, 6)
 
     @latitude.setter
     def latitude(self, value: float):
+        """Set the latitude of the station"""
         self._point.latitude = value
 
     @property
     def longitude(self) -> float:
+        """Get the longitude of the station"""
         return round(self._point.longitude, 6)
 
     @longitude.setter
     def longitude(self, value: float):
+        """Set the longitude of the station"""
         self._point.longitude = value
 
     @property
     def ambiguity(self) -> int:
+        """Get the ambiguity level of the packet"""
         return self._ambiguity
 
     @ambiguity.setter
     def ambiguity(self, value: int):
+        """Set the ambiguity level of the packet"""
         self._ambiguity = value
 
     @property
     def course(self) -> int:
+        """Get the course of the station"""
         return self._course
 
     @course.setter
     def course(self, value: int):
+        """Set the course of the station"""
         self._course = value
 
     @property
     def speed(self) -> int:
+        """Get the speed of the station"""
         return self._speed
 
     @speed.setter
     def speed(self, value: int):
+        """Set the speed of the station"""
         self._speed = value
 
     @property
     def altitude(self) -> int:
+        """Get the altitude of the station"""
         return self._point.altitude
 
     @altitude.setter
     def altitude(self, value: int):
+        """Set the altitude of the station"""
         self._point.altitude = value
 
     @property
     def comment(self) -> str:
+        """Get the packet's comment"""
         return self._comment
 
     @comment.setter
     def comment(self, value: str):
+        """Set the packet's comment"""
         self._comment = value
 
     @property
@@ -352,7 +379,17 @@ class PositionPacket(APRSPacket):
 
     @staticmethod
     def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
+        """
+        Parse uncompressed position data from a packet.
+
+        Given the information field of a packet with the initial data type identifier stripped, this
+        will parse the latitude, longitude, position abiguity, symbol table and symbol ID, and
+        return them in a tuple.
+        """
+        # Decode the latitude and ambiguity
         lat, ambiguity = APRS.decode_uncompressed_latitude(data[0:8])
+
+        # Decode the longitude
         lng = APRS.decode_uncompressed_longitude(data[9:18])
 
         logger.debug("Latitude: {} ({}) Longitude: {}".format(
@@ -360,12 +397,14 @@ class PositionPacket(APRSPacket):
         ))
 
         try:
+            # Parse the symbol table
             symbol_table = data[8]
             logger.debug("Symbol table: {}".format(symbol_table))
         except IndexError:
             raise ParseError("Missing symbol table identifier")
 
         try:
+            # Parse the symbol ID
             symbol = data[18]
             logger.debug("Symbol: {}".format(symbol))
         except IndexError:
@@ -375,17 +414,28 @@ class PositionPacket(APRSPacket):
 
     @staticmethod
     def _parse_compressed_position(data: str) -> Tuple[
-            float, float, float, str, int, float, float]:
+            float, float, Optional[float], Optional[float], Optional[float], Optional[float]]:
+        """
+        Parse compressed position data from a packet.
+
+        Given the information field of a packet with the initial data type identifier stripped, this
+        will parse the latitude and longitude, and optionally the altitude, course, speed and radio
+        range.
+        """
         logger.debug("Compressed lat/lng is: {}".format(data))
 
+        # Parse the compressed latitude and longitude character from the packet
         comp_lat = data[1:5]
         comp_lng = data[5:9]
 
+        # Decode the latitude and longitude
         latitude = APRS.decode_compressed_latitude(comp_lat)
         longitude = APRS.decode_compressed_longitude(comp_lng)
 
         logger.debug("Latitude: {} Longitude: {}".format(latitude, longitude))
 
+        # Decode the compression type, which determines what other data the packet provides.
+        # The presence of this is mandatory, so any packet without it is invalid.
         try:
             comp_type = "{:0>8b}".format((ord(data[12])-33))[::-1]
         except IndexError:
@@ -396,27 +446,37 @@ class PositionPacket(APRSPacket):
         speed = None
         radio_range = None
 
-        # check for altitude, course/speed or radio range
+        # Check for altitude, course/speed or radio range
         if comp_type[3] == "0" and comp_type[4] == "1":
-            # altitude from GGA sentence
+            # The altitude is obtained by subtracting 33 from the ASCII value for the c and s
+            # characters, multiplying c by 91, adding s, and then raising 1.002 to the power of the
+            # result.
+            # See APRS 1.01 C9 P40
             c = ord(data[10]) - 33
             s = ord(data[11]) - 33
-
-            # base91 conversion
             altitude = (1.002 ** (c * 91 + s))
 
             logger.debug("Altitude: {}".format(altitude))
 
         elif 0 <= (ord(data[10])-33) <= 89:
-            # course/speed
-            course = (ord(data[10])-33) * 4
-            speed = round((1.08 ** (ord(data[11])-33) - 1), 1)
+            # The course is obtained by subtracting 33 from the ASCII value of c and then
+            # multiplying it by 4
+            c = ord(data[10]) - 33
+            course = c * 4
+
+            # The speed is obtained by subtracting 33 from the ASCII value of s and then raising
+            # 1.08 to the power of the result, and finally subtracting 1.
+            # We round the result to 1 decimal place.
+            s = ord(data[11]) - 33
+            speed = round(1.08 ** (s - 1), 1)
 
             logger.debug("Course: {} Speed: {}".format(course, speed))
 
         elif data[10] == "{":
-            # radio range
-            radio_range = 2 * (1.08 ** (ord(data[11])-33))
+            # The radio range is obtained by subtracting 33 from the ASCII value of s, raising 1.08
+            # to the power of the result, and finally multiplying it by 2.
+            s = ord(data[11]) - 33
+            radio_range = 2 * (1.08 ** s)
 
             logger.debug("Radio range: {}".format(radio_range))
 
@@ -432,6 +492,14 @@ class PositionPacket(APRSPacket):
 
     @staticmethod
     def _parse_data(data: str) -> Tuple[str, str, str, int, int, int, str]:
+        """
+        Parse additional information from the information field.
+
+        Position packets can have additional information in them, such as station power, antenna
+        height, antenna gain, etc. These are described in APRS 1.01 C7. This will parse out the raw
+        values, but not decode them.
+        """
+
         phg = None
         rng = None
         dfs = None
@@ -440,54 +508,60 @@ class PositionPacket(APRSPacket):
         altitude = None
         comment = None
 
-        # check for PHG
         if re.match(r'^PHG[0-9]{4}', data[:7]):
-            # TODO - add phg to packet
-            # TODO - expand
+            # Packet has a PHG (power, antenna height/gain/directivity) value
             phg = data[3:7]
             logger.debug("PHG is {}".format(phg))
             data = data[7:]
 
         elif re.match('^RNG[0-9]{4}', data[:7]):
-            # TODO - add rng to packet
-            # TODO - expand
+            # Packet has an RNG (radio range) value
             rng = data[3:7]
             logger.debug("RNG is {}".format(rng))
             data = data[7:]
 
         elif re.match('^DFS[0-9]{4}', data[:7]):
-            # TODO - add dfs to packet
-            # TODO - expand
+            # Packet has a DFS (DF signal strength, antenna height/gain/directivity) value
             dfs = data[3:7]
             logger.debug("DFS is {}".format(dfs))
             data = data[7:]
 
         elif re.match('^[0-9]{3}/[0-9]{3}', data[:7]):
-            # TODO - fix formats
+            # Packet has course and speed values
             course = int(data[:3])
             speed = int(data[4:7])
             logger.debug("Course is {}, speed is {}".format(course, speed))
             data = data[7:]
 
-        # check for comment
+        # Check for comment
         if len(data) > 0:
 
-            # check for altitude
-            # as per spec ch6 p26, altitude as /A=nnnnnn may appear anywhere in
-            # the comment
+            # Check for altitude
+            # As per APRS 1.01 C6 P26, altitude as /A=nnnnnn may appear anywhere in the comment
             has_altitude = re.match('.*/A=([0-9]{6}).*', data)
             if has_altitude:
                 # TODO - fix altitude format
                 altitude = int(has_altitude.groups()[0])
                 logger.debug("Altitude is {} ft".format(altitude))
 
-            # TODO - add comment to packet
+            # Set the comment as the remainder of the information field
             comment = data
             logger.debug("Comment is {}".format(comment))
 
         return (phg, rng, dfs, course, speed, altitude, comment)
 
     def _parse(self) -> bool:
+        """
+        Parse a position packet.
+
+        There are a number of different position packet types - with or without a timestamp, and
+        with or without messaging capability. The data type ID is used to distinguish between them.
+
+        The position data itself can either be compressed or uncompressed, regardless of the data
+        type ID.
+
+        The parsed and decoded values are stored in the current object.
+        """
 
         if self.data_type_id == '!':
             # Packet has no timestamp, station has no messaging capability
@@ -519,28 +593,34 @@ class PositionPacket(APRSPacket):
             # This isn't a position packet
             raise ParseError("Unknown position data type: {}".format(self.data_type_id))
 
-        # Check to see if the position data is compressed or uncompressed
         if timestamp is False:
             data = self.info[1:]
         else:
             data = self.info[8:]
 
+        # Check to see if the position data is compressed or uncompressed
         if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
-            (self.latitude, self.longitude, self.ambiguity, self.symbol_table, self.symbol
+            # Parse the uncompressed position values from the information field
+            (self.latitude, self.longitude, self.ambiguity, self.symbol_table, self.symbol_id
              ) = self._parse_uncompressed_position(data)
+
             if len(data) > 19:
+                # This packet has additional data in the information field, so attempt to parse it
                 (phg, radio_range, dfs, self.course, self.speed, self.altitude,
                  comment) = self._parse_data(data[19:])
 
-                if self.symbol_table == "/" and self.symbol == "\\":
+                if self.symbol_table == "/" and self.symbol_id == "\\":
                     # If the symbol table is /, and the symbol ID is \, it implies a DF report
                     # 26th and 30th characters should be /
                     logger.debug("Symbol table and symbol indicates a DF report")
 
                     if len(comment) < 8:
+                        # Packets with DF information must be at least 8 characters long
                         raise ParseError("Missing DF values", self)
 
                     if comment[0] != "/" or comment[4] != "/":
+                        # Packets with DF information must also include the bearing and NRQ values
+                        # See APRS 1.01 C7 P30
                         raise ParseError("Invalid DF values", self)
 
                     # Extract the bearing
@@ -553,7 +633,7 @@ class PositionPacket(APRSPacket):
                     # Strip the bearing/NRQ value from the comment
                     self.comment = comment[8:]
 
-                elif self.symbol_table in ["/", "\\"] and self.symbol == "_":
+                elif self.symbol_table in ["/", "\\"] and self.symbol_id == "_":
                     # / or \, and _ for the symbol table and symbol implies a weather report
                     logger.debug("Symbol table and symbol indicates a weather report")
 
@@ -584,12 +664,14 @@ class PositionPacket(APRSPacket):
                     self.comment = comment
 
         else:
+            # Parse the compressed position values from the information field
             compressed_position = data[0:13]
             (self.latitude, self.longitude, self.altitude, self.course, self.speed,
              self.radio_range) = self._parse_compressed_position(compressed_position)
 
+            # Parse the symbol table and symbol ID
             self.symbol_table = data[0]
-            self.symbol = data[9]
+            self.symbol_id = data[9]
 
             self.comment = data[13:]
             logger.debug("Comment is {}".format(self.comment))
@@ -605,16 +687,27 @@ class PositionPacket(APRSPacket):
 
 
 class MICEPacket(PositionPacket):
+    """
+    Class to represent Mic-E encoded position packets.
+
+    Mic-E packets encode position data in both the APRS destination and information fields, enabling
+    a large amount of information to be conveyed in a single packet.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _decode_latitude(destination):
-        # parse destination call
-        # The spec is far too convoluted to describe here, but see c10, p44.
-        # Essentially, letters are used to denote the latitude, with different
-        # letters if other flags are flipped on and off
+    def _decode_latitude(destination) -> Tuple[float, int, bool, str, int, int, int, bool]:
+        """
+        Decode the latitude.
+
+        Mic-E packets encode the latitude in the destination field, along with the north/south,
+        east/west, longitude offset and message identifier. In addition, the SSID can be used to
+        denote a generic APRS digipeater path.
+
+        For more information, seeee APRS 1.01 C10 P43.
+        """
 
         latitude = ""
         north_south = ""
@@ -626,11 +719,12 @@ class MICEPacket(PositionPacket):
         message_custom = False
         lng_offset = False
 
+        # Iterate over each character of the destination address
         count = 0
         for i in destination[0:6]:
             count += 1
             if 48 <= ord(i) <= 57:
-                # digit, leave as-is
+                # 0-9 are used as-is
                 latitude += i
                 enc_set = 1
             elif 65 <= ord(i) <= 74:
@@ -651,7 +745,7 @@ class MICEPacket(PositionPacket):
                 raise ParseError("Unexpected character in Mic-E destination field")
 
             if count == 1:
-                # first field is changed depending on the message a-bit
+                # The first field is changed depending on the message a-bit
                 if enc_set == 1:
                     message_a = 0
                 elif enc_set == 2:
@@ -660,7 +754,7 @@ class MICEPacket(PositionPacket):
                 elif enc_set == 3:
                     message_a = 1
             elif count == 2:
-                # second field is changed depending on the message b-bit
+                # The second field is changed depending on the message b-bit
                 if enc_set == 1:
                     message_b = 0
                 elif enc_set == 2:
@@ -669,7 +763,7 @@ class MICEPacket(PositionPacket):
                 elif enc_set == 3:
                     message_b = 1
             elif count == 3:
-                # third field is changed depending on the message c-bit
+                # The third field is changed depending on the message c-bit
                 if enc_set == 1:
                     message_c = 0
                 elif enc_set == 2:
@@ -678,22 +772,22 @@ class MICEPacket(PositionPacket):
                 elif enc_set == 3:
                     message_c = 1
             elif count == 4:
-                # fourth field is changed to denote north/south
+                # The fourth field is changed to denote north/south
                 if enc_set == 1:
                     north_south = "S"
                 else:
                     north_south = "N"
 
-                # append a . to the latitude here, too
+                # Append a . to the latitude here, too
                 latitude += "."
             elif count == 5:
-                # fifth field is changed to denote the longitude offset
+                # The fifth field is changed to denote the longitude offset
                 if enc_set == 1:
                     lng_offset = False
                 else:
                     lng_offset = True
             elif count == 6:
-                # sixth field is changed to denote east/west
+                # The sixth field is changed to denote east/west
                 if enc_set == 1:
                     east_west = "E"
                 else:
@@ -703,7 +797,8 @@ class MICEPacket(PositionPacket):
         if len(destination) > 6:
             logger.debug("Mic-E destination has SSID: {}".format(destination.split('-')[1]))
 
-        # Convert to actual latitude, and store in the packet
+        # Now that we have an uncompressed latitude, we can decode it like a standard uncompressed
+        # packet
         decoded_latitude, ambiguity = APRS.decode_uncompressed_latitude(
             "{}{}".format(latitude, north_south)
         )
@@ -721,44 +816,41 @@ class MICEPacket(PositionPacket):
                 message_c, message_custom)
 
     @staticmethod
-    def _decode_longitude(info, lng_offset, east_west):
-        # The longitude is stored in the first 3 characters of the info field, AFTER
-        # stripping off the data type identifier
+    def _decode_longitude(info, lng_offset, east_west) -> float:
+        """
+        Decode the longitude.
+
+        The longitude is stored in the 3 characters of the info field immediately following the data
+        type identifier. Combined with the east/west and longitude offset values from decoding the
+        latitude, we can decode the longitude.
+
+        See also APRS 1.01 C10 P47.
+        """
+
         logger.debug("Info input: {}".format(info))
+        # The degrees, minutes and hundreths of minutes are obtained by subtracting 28 from the
+        # ASCII values of the 3 characters
         lng_deg = ord(info[1]) - 28
         lng_min = ord(info[2]) - 28
         lng_hmin = ord(info[3]) - 28
 
-        logger.debug(
-            "BEFORE: lng_deg: {}, lng_min: {}, lng_hmin: {}".format(lng_deg, lng_min, lng_hmin)
-        )
-
-        # decode the degrees
-        # c10 p48
-        # if the longitude offset was set in the destination field, apply it now
+        # If the longitude offset is set, apply it to the degrees value
         if lng_offset:
-            logger.debug("> 100 added to lng_deg")
             lng_deg += 100
 
-        # if it's now between 180 and 189, subtract 80
-        # if between 190 and 199, subtract 190
+        # Next, if the value is between 180 and 189, subtract 80. If it's between 190 and 199,
+        # subtract 190.
         if 180 <= lng_deg <= 189:
-            logger.debug("> 80 subtracted from lng_deg")
             lng_deg -= 80
         elif 190 <= lng_deg <= 199:
-            logger.debug("> 190 subtracted from lng_deg")
             lng_deg -= 190
 
-        # decode the minutes
-        # if the minutes value is more than 60, subtract 60
+        # If the minutes value is more than 60, subtract 60
         if lng_min >= 60:
             logger.debug("> 60 subtracted from lng_min")
             lng_min -= 60
 
-        logger.debug(
-            "AFTER: lng_deg: {}, lng_min: {}, lng_hmin: {}".format(lng_deg, lng_min, lng_hmin)
-        )
-
+        # Now that we have an uncompressed longitude, we can decode it
         longitude = APRS.decode_uncompressed_longitude("{}{}.{}{}".format(
             str(lng_deg).zfill(3),
             str(lng_min).zfill(2),
@@ -773,33 +865,48 @@ class MICEPacket(PositionPacket):
 
     @staticmethod
     def _decode_speed_and_course(info):
-        # speed and course is stored in the next 3 characters
+        """
+        Decode the speed and course.
+
+        The 3 characters after the longitude characters define the speed and course of the station.
+
+        See also APRS 1.01 C10 P49.
+        """
+
         try:
+            # For each of the 3 characters, subtract 28 from the ASCII value
             sp = ord(info[4]) - 28
             dc = ord(info[5]) - 28
             se = ord(info[6]) - 28
         except IndexError:
             raise ParseError("Couldn't parse speed/course in Mic-E packet")
 
+        # The speed is in knots, and is obtained by multiplying sp by 10, and adding the quotient of
+        # dc divided by 10
         speed = (sp * 10) + int(dc / 10)
+
+        # The course is in degrees, and is obtained by multiplying the remainder of dc divided by 10
+        # by 100, and then adding the value of se
         course = ((dc % 10) * 100) + se
 
+        # If the speed value is greater than or equal to 800, subtract 800 from it
         if speed >= 800:
             speed -= 800
 
+        # If the course value is greater than or equal to 400, subtract 400 from it
         if course >= 400:
             course -= 400
 
-        # TODO - convert to kmh
-        speed = speed
-        course = course
         logger.debug("Speed is {} knots, course is {} degrees".format(speed, course))
 
         return (speed, course)
 
     def _parse(self):
+        """
+        Parse a Mic-E packet.
 
-        # oh dear
+        The parsed and decoded values are stored in the current object.
+        """
 
         # Decode the latitude, ambiguity, the longitude offset, the east/west direction and the
         # message bits
@@ -815,8 +922,8 @@ class MICEPacket(PositionPacket):
 
         # Parse the symbol table and symbol from the info field
         try:
-            self.symbol = self.info[7]
-            logger.debug("Symbol is {}".format(self.symbol))
+            self.symbol_id = self.info[7]
+            logger.debug("Symbol is {}".format(self.symbol_id))
         except IndexError:
             raise ParseError("Missing symbol", self)
 
@@ -849,12 +956,11 @@ class MICEPacket(PositionPacket):
                     self.altitude = altitude
                     logger.debug("Altitude is {}m".format(altitude))
 
-                    # The remainder is the status text
+                    # The remainder is the comment
                     self.comment = status_text[4:]
                     logger.debug("Comment is {}".format(self.comment))
 
                 else:
-                    # TODO - add status_text to packet
                     self.comment = status_text
         else:
             logger.debug("Packet contains no further information.")
@@ -867,6 +973,14 @@ class MICEPacket(PositionPacket):
 
 
 class StatusPacket(APRSPacket):
+    """
+    Class to represent status report packets.
+
+    As per APRS 1.01, status reports "announce(s) the station's current mission or any other single
+    line status to everyone". The data type identifier for status reports is ">".
+
+    See APRS 1.01 C16 P80
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -875,23 +989,33 @@ class StatusPacket(APRSPacket):
 
     @property
     def status_message(self) -> str:
+        """Get the status message"""
         return self._status_message
 
     @status_message.setter
     def status_message(self, value: str):
+        """Set the status message"""
         self._status_message = value
 
     @property
     def maidenhead_locator(self) -> str:
+        """Get the Maidenhead locator (if set)"""
         return self._maidenhead_locator
 
     @maidenhead_locator.setter
     def maidenhead_locator(self, value: str):
+        """Set the Maidenhead locator"""
         self._maidenhead_locator = value
 
-    def _parse(self):
-        # C16 P80
-        # This one is a mess
+    def _parse(self) -> bool:
+        """
+        Parse a status report packet.
+
+        Status reports contain a status message and optionally a timestamp or Maidenhead locator
+        (but not both), and/or a beam heading and ERP value.
+
+        Parse and decoded values are stored in the current object.
+        """
 
         # Maidenhead locators, if present, must be first, and can be 4 or 6 characters.
         # They must also include a symbol table and symbol code (P81).
@@ -917,10 +1041,10 @@ class StatusPacket(APRSPacket):
             self.maidenhead_locator = mh_6[0:6]
 
             self.symbol_table = mh_6[6]
-            self.symbol = mh_6[7]
+            self.symbol_id = mh_6[7]
 
             logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
-                self.maidenhead_locator, self.symbol_table, self.symbol
+                self.maidenhead_locator, self.symbol_table, self.symbol_id
             ))
 
             if len(self.info) != 9:
@@ -939,10 +1063,10 @@ class StatusPacket(APRSPacket):
             self.maidenhead_locator = mh_4[0:4]
 
             self.symbol_table = mh_4[4]
-            self.symbol = mh_4[5]
+            self.symbol_id = mh_4[5]
 
             logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
-                self.maidenhead_locator, self.symbol_table, self.symbol
+                self.maidenhead_locator, self.symbol_table, self.symbol_id
             ))
 
             if len(self.info) != 7:
@@ -975,6 +1099,7 @@ class StatusPacket(APRSPacket):
                 logger.debug("Status message is {}".format(self.status_message))
 
         # Check for a beam heading and ERP
+        # TODO - Parse and decode the beam and ERP values
         if self.status_message and re.match(r'[\^].{2}', self.status_message[-3:]):
             logger.debug("Status message heading and power: {}".format(self.status_message[-2:]))
 
@@ -986,6 +1111,14 @@ class StatusPacket(APRSPacket):
 
 
 class MessagePacket(APRSPacket):
+    """
+    Class to represent APRS message packets.
+
+    APRS message packets can be from one station to another, or general bulletins or announcements
+    which are intended for a wider audience.
+
+    See also APRS 1.01 C14 P71
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -999,26 +1132,32 @@ class MessagePacket(APRSPacket):
 
     @property
     def addressee(self) -> str:
+        """Get the addressee of the message"""
         return self._addressee
 
     @addressee.setter
     def addressee(self, value: str):
+        """Set the addressee of the message"""
         self._addressee = value
 
     @property
     def message(self) -> str:
+        """Get the message"""
         return self._message
 
     @message.setter
     def message(self, value: str):
+        """Set the message"""
         self._message = value
 
     @property
     def message_id(self) -> str:
+        """Get the message ID"""
         return self._message_id
 
     @message_id.setter
     def message_id(self, value: str):
+        """Set the message ID"""
         self._message_id = value
 
     @property
@@ -1031,34 +1170,46 @@ class MessagePacket(APRSPacket):
 
     @property
     def bulletin_id(self) -> int:
+        """Get the bulletin ID"""
         return self._bulletin_id
 
     @bulletin_id.setter
     def bulletin_id(self, value: int):
+        """Set the bulletin ID"""
         self._bulletin_id = value
 
     @property
     def announcement_id(self) -> str:
+        """Get the announcement ID"""
         return self._announcement_id
 
     @announcement_id.setter
     def announcement_id(self, value: str):
+        """Set the announcement ID"""
         self._announcement_id = value
 
     @property
     def group_bulletin(self) -> str:
+        """Get the group bulletin name"""
         return self._group_bulletin
 
     @group_bulletin.setter
     def group_bulletin(self, value: str):
+        """Set the group bulletin name"""
         self._group_bulletin = value
 
-    def _parse(self):
+    def _parse(self) -> bool:
+        """
+        Parse a message packet.
+
+        The parsed values are stored within the current object.
+        """
+
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
         if self.info[10] != ":":
             raise ParseError("Invalid message packet", self)
 
-        # Split the message
+        # Split the message into the addressee and the actual message
         addressee = self.info[1:10]
         self.addressee = addressee.rstrip()
         message = self.info[11:]
@@ -1071,6 +1222,8 @@ class MessagePacket(APRSPacket):
             self.bulletin = True
 
             if re.match("[0-9]", addressee[3]):
+                # Bulletins have the format BLNn or BLNnaaaaa, where n is a digit between 0 and 9
+                # and aaaaa is an optional group bulletin identifier
                 if addressee[4:9] == "     ":
                     # Bulletin
                     self.bulletin_id = int(addressee[3])
@@ -1085,6 +1238,7 @@ class MessagePacket(APRSPacket):
                     ))
 
             elif re.match("[A-Z]", addressee[3]):
+                # Announcements have the format BLNa, where a is a character between A and Z
                 if addressee[4:9] == "     ":
                     # Announcement
                     self.announcement_id = addressee[3]
@@ -1110,6 +1264,8 @@ class MessagePacket(APRSPacket):
             self.message_id = message_id
         else:
             self.message = message
+
+        return True
 
     def __repr__(self):
         if self.source:
@@ -1144,6 +1300,12 @@ class ObjectPacket(APRSPacket):
 
 
 class APRS:
+    """
+    Main APRS class.
+
+    This class provides functions for parsing and decoding different kinds of APRS packets.
+    Packet type-specific functions are defined under the different APRSPacket subclasses.
+    """
 
     @staticmethod
     def decode_uncompressed_latitude(latitude: str) -> Tuple[Union[int, float], int]:
@@ -1152,15 +1314,15 @@ class APRS:
         value.
 
         Uncompressed latitudes have the format DDMM.HHC, where:-
-        * DD are the degrees
-        * MM are the minutes
-        * HH are the hundredths of minutes
-        * C is either N (for the northern hemisphere) or S (southern)
+         * DD are the degrees
+         * MM are the minutes
+         * HH are the hundredths of minutes
+         * C is either N (for the northern hemisphere) or S (southern)
 
         MM and HH can be replaced with spaces (" ") to provide positional
         ambiguity (C6 P24).
 
-        See also APRS101 C6 P23.
+        See also APRS 1.01 C6 P23.
         """
         logger.debug("Input latitude: {}".format(latitude))
 
@@ -1218,10 +1380,10 @@ class APRS:
         optional ambiguity level applied.
 
         Uncompressed longitudes have the format DDDMM.HHC, where:-
-        * DD are the degrees
-        * MM are the minutes
-        * HH are the hundreths of minutes
-        * C is either W (for west of the meridian) or E (for east)
+         * DD are the degrees
+         * MM are the minutes
+         * HH are the hundreths of minutes
+         * C is either W (for west of the meridian) or E (for east)
 
         Positional ambiguity is handled by the latitude, and so should be
         honoured regardless of the precision of the longitude given (as per C6 P24).
@@ -1305,7 +1467,7 @@ class APRS:
         Compressed latitudes have the format YYYY, where all values are base-91
         printable ASCII characters.
 
-        See also APRS101 C9 P38.
+        See also APRS 1.01 C9 P38.
         """
         logger.debug("Input compressed latitude: {}".format(latitude))
 
@@ -1316,7 +1478,7 @@ class APRS:
             ))
 
         try:
-            # As per APRS101, if the compressed latitude is y1y2y3y4, the latitude
+            # As per APRS 1.01, if the compressed latitude is y1y2y3y4, the latitude
             # can be determined with:-
             # 90 - ((y1-33) x 913 + (y2-33) x 912 + (y3-33) x 91 + y4-33) / 380926
             lat = 90 - (
@@ -1342,7 +1504,7 @@ class APRS:
         Compressed longitude have the format XXXX, where all values are base-91
         printable ASCII characters
 
-        See also APRS101 C9 P38
+        See also APRS 1.01 C9 P38
         """
         logger.debug("Input compressed longitude: {}".format(longitude))
 
@@ -1364,14 +1526,22 @@ class APRS:
         return lng
 
     @staticmethod
-    def decode_timestamp(raw_timestamp):
+    def decode_timestamp(raw_timestamp) -> int:
+        """
+        Decode a timestamp.
+
+        Timestamps can take a number of different forms:-
+         * Zulu, identified with a trailing 'z', which refers to zulu time
+         * Local, identified with a trailing '/', which has no timezone information
+         * A hour/minute/second timestamp without any date information
+        """
 
         logger.debug("Raw timestamp is {}".format(raw_timestamp))
         ts = re.match(r'^(\d{6})([\/hz])', raw_timestamp)
         if ts:
             timestamp, timestamp_type = ts.groups()
 
-            # Set the timestamp type in the packet
+            # Parse the timestamp type
             if timestamp_type == 'z':
                 timestamp_type = 'zulu'
                 logger.debug("Timestamp is zulu time")
@@ -1385,23 +1555,28 @@ class APRS:
                 logger.error("Invalid timestamp type: {}".format(timestamp_type))
                 raise ParseError("Invalid timestamp type: {}".format(timestamp_type))
 
+            # Get the current UTC ('zulu') time for comparison. Since timestamps in HHMMSS format
+            # have no date information, we need to determine if the timestamp is for today or
+            # yesterday
             utc = datetime.utcnow()
 
             if timestamp_type == 'hms':
-                # hhmmss format
+                # HHMMSS format
 
+                # Parse out the hour, minute and second
                 hour = int(timestamp[0:2])
                 minute = int(timestamp[2:4])
                 second = int(timestamp[4:6])
 
                 try:
+                    # Generate a datetime object
                     ts = datetime(utc.year, utc.month, utc.day, hour, minute, second)
                 except ValueError as e:
                     raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
 
-                # check it's not in the future
+                # Check it's not in the future
                 if ts > utc:
-                    # time is in the future, so go back a day
+                    # The timestamp is in the future, so go back a day
                     ts -= timedelta(days=1)
 
                 # Convert to seconds
@@ -1410,15 +1585,14 @@ class APRS:
 
             elif timestamp_type == 'zulu' or timestamp_type == 'local':
                 if timestamp_type == 'local':
-                    # assume local time is zulu time
+                    # Assume local time is zulu time
                     # NOTE: this is against the spec, but without knowing the local
-                    # timezone, it's impossible to work out. The spec (ch 6, page
-                    # 22) states "It is recommended that future APRS implementations
-                    # only transmit zulu format on the air", so hopefully this
-                    # shouldn't be a problem in reality.
+                    # timezone, it's impossible to work out. APRS 1.01 C6 P22 states "It is
+                    # recommended that future APRS implementations only transmit zulu format on the
+                    # air", so hopefully this shouldn't be a problem in reality.
                     logger.warn("Local time specified in timestamp, assuming UTC.")
 
-                # ddhhmm
+                # DDHHMM
                 day = int(timestamp[0:2])
                 hour = int(timestamp[2:4])
                 minute = int(timestamp[4:6])
@@ -1428,13 +1602,11 @@ class APRS:
                     ts = datetime(utc.year, utc.month, day, hour, minute, 0)
                 except ValueError:
                     raise ParseError("Error parsing timestamp: {}".format(timestamp))
-                    # p.timestamp = 0
-                    # return
 
-                # check it's not in the future
+                # Check it's not in the future
                 if ts > utc:
                     logger.debug("Timestamp day in previous month.")
-                    # time is in the future, so go back a month
+                    # The time is in the future, so go back a month
                     # timedelta doesn't support subtracting months, so here be
                     # dirty hacks.
                     if 1 < ts.month <= 12:
@@ -1463,15 +1635,15 @@ class APRS:
         individual values.
 
         The PHG extension provides a way of specifying approximate values for:-
-        * Power (in watts)
-        * Height above average local terrain (in feet)
-        * Antenna gain (in dB)
-        * Directivity (in degrees)
+         * Power (in watts)
+         * Height above average local terrain (in feet)
+         * Antenna gain (in dB)
+         * Directivity (in degrees)
 
         PHG values are 4 characters long, and each digit is responsible for one of the above values.
         As per the APRS spec, the height value can be any ASCII character from 0 upwards.
 
-        See APRS101 C7 P28
+        See APRS 1.01 C7 P28
         """
 
         # Ensure this is a valid PHG value
@@ -1512,16 +1684,16 @@ class APRS:
         Parse a DFS (Omni-DF Signal Strength) value and return the individual values.
 
         The DFS extension provides a way of specifying approximate values for:-
-        * Received signal strength (in S-points)
-        * Antenna height above average terrain (in feet)
-        * Antenna gain (in dB)
-        * Directivity (in degrees)
+         * Received signal strength (in S-points)
+         * Antenna height above average terrain (in feet)
+         * Antenna gain (in dB)
+         * Directivity (in degrees)
 
         Like PHG values, DFS values are 4 characters long, and each digit is responsible for one of
         the above values. The APRS spec does not specify it, but it is assumed that - like the PHG
         value - the antenna height can be any ASCII value from 0 upwards.
 
-        See APRS101 C7 P29
+        See APRS 1.01 C7 P29
         """
 
         # Ensure this is a valid DFS value
@@ -1562,9 +1734,9 @@ class APRS:
         Parse an NRQ (Number/Range/Quality) value and return the individual values.
 
         For direction-finding reports, the NRQ value provides:-
-        * The number of hits per period relative to the length of the time period (as a percentage)
-        * The range (in miles)
-        * The bearing accuracy (in degrees)
+         * The number of hits per period relative to the length of the time period (as a percentage)
+         * The range (in miles)
+         * The bearing accuracy (in degrees)
 
         NRQ values are 3 digits long, and all digits from 0 to 9. An 'N' value of 0 implies that the
         rest of the values are meaningless. An 'N' value of 9 indicates that the report is manual.
@@ -1572,7 +1744,7 @@ class APRS:
         The bearing accuracy represents the degree of accuracy, so a 'Q' value of 3 is 64, meaning
         that the accuracy is to less than 64 degrees.
 
-        See APRS101 C7 P30
+        See APRS 1.01 C7 P30
         """
 
         # Ensure this is a valid NRQ value
@@ -1617,6 +1789,9 @@ class APRS:
 
     @staticmethod
     def parse(packet: str = None) -> "APRSPacket":
+        """
+        Parse an APRS packet, and return a subclass of APRSPacket appropriate for the packet type.
+        """
 
         try:
             # Parse out the source, destination, path and information fields
@@ -1679,9 +1854,9 @@ class APRS:
             raise UnsupportedError("Unsupported data type: '<' (Station Capabilities) - C15 P77")
 
         elif 0 <= info.find('!') <= 40:
-            # As per the spec (Ch 5, page 18) position-without-timestamp packets may
-            # have the '!' located anywhere up to the 40th character in the
-            # information field. If we're here, test for that now.
+            # As per APRS 1.0 C5 P18, position-without-timestamp packets may have the '!' located
+            # anywhere up to the 40th character in the information field. If we're here, test for
+            # that now.
             logger.debug("Found ! in information field, parsing as position packet")
             p = PositionPacket()
 
@@ -1690,6 +1865,8 @@ class APRS:
             # Return a generic APRS Packet with the basic info
             p = APRSPacket()
 
+        # Set the source, destination, path and information fields, along with the checksum, data
+        # type ID and the raw packet
         p.source = source
         p.destination = destination
         p.path = path
@@ -1698,7 +1875,9 @@ class APRS:
         p.data_type_id = data_type_id
         p.raw = packet
 
+        # Call the packet-specific parser
         p._parse()
 
+        # Return the packet object
         return p
 
