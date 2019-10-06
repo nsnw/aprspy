@@ -9,6 +9,7 @@ from geopy.point import Point
 
 from typing import Union, List, Tuple, Optional
 
+# Set up logging
 logger = logging.getLogger(__name__)
 
 
