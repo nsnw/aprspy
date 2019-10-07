@@ -43,11 +43,16 @@
 <em class="property">class </em><code class="sig-prename descclassname">aprspy.</code><code class="sig-name descname">APRS</code><a class="headerlink" href="#aprspy.APRS" title="Permalink to this definition">¶</a></dt>
 <dd><p>Main APRS class.</p>
 <p>This class provides functions for parsing and decoding different kinds of APRS packets.
-Packet type-specific functions are defined under the different APRSPacket subclasses.</p>
+Packet type-specific functions are defined under the different <a class="reference internal" href="#aprspy.APRSPacket" title="aprspy.APRSPacket"><code class="xref py py-class docutils literal notranslate"><span class="pre">APRSPacket</span></code></a> subclasses.</p>
 <dl class="method">
 <dt id="aprspy.APRS.decode_compressed_latitude">
 <em class="property">static </em><code class="sig-name descname">decode_compressed_latitude</code><span class="sig-paren">(</span><em class="sig-param">latitude: str</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_compressed_latitude" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convert a compressed latitude string to a latitude value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>latitude</strong> (<em>str</em>) – a latitude in a compressed format</p>
+</dd>
+</dl>
 <p>Compressed latitudes have the format YYYY, where all values are base-91
 printable ASCII characters.</p>
 <p>See also APRS 1.01 C9 P38.</p>
@@ -57,6 +62,11 @@ printable ASCII characters.</p>
 <dt id="aprspy.APRS.decode_compressed_longitude">
 <em class="property">static </em><code class="sig-name descname">decode_compressed_longitude</code><span class="sig-paren">(</span><em class="sig-param">longitude: str</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_compressed_longitude" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convert a compressed longitutde string latitude value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>longitude</strong> (<em>str</em>) – a longitude in compressed format</p>
+</dd>
+</dl>
 <p>Compressed longitude have the format XXXX, where all values are base-91
 printable ASCII characters</p>
 <p>See also APRS 1.01 C9 P38</p>
@@ -65,7 +75,12 @@ printable ASCII characters</p>
 <dl class="method">
 <dt id="aprspy.APRS.decode_dfs">
 <em class="property">static </em><code class="sig-name descname">decode_dfs</code><span class="sig-paren">(</span><em class="sig-param">dfs: str</em><span class="sig-paren">)</span> &#x2192; Tuple[int, int, int, Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_dfs" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parse a DFS (Omni-DF Signal Strength) value and return the individual values.</p>
+<dd><p>Decode a DFS (Omni-DF Signal Strength) value and return the individual values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>dfs</strong> (<em>str</em>) – a DFS value, minus the initial <code class="docutils literal notranslate"><span class="pre">DFS</span></code> identifier</p>
+</dd>
+</dl>
 <dl class="simple">
 <dt>The DFS extension provides a way of specifying approximate values for:-</dt><dd><ul class="simple">
 <li><p>Received signal strength (in S-points)</p></li>
@@ -85,6 +100,11 @@ value - the antenna height can be any ASCII value from 0 upwards.</p>
 <dt id="aprspy.APRS.decode_nrq">
 <em class="property">static </em><code class="sig-name descname">decode_nrq</code><span class="sig-paren">(</span><em class="sig-param">nrq: str</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[float, str, None], Optional[int], Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_nrq" title="Permalink to this definition">¶</a></dt>
 <dd><p>Parse an NRQ (Number/Range/Quality) value and return the individual values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>nrq</strong> (<em>str</em>) – an NRQ value</p>
+</dd>
+</dl>
 <dl class="simple">
 <dt>For direction-finding reports, the NRQ value provides:-</dt><dd><ul class="simple">
 <li><p>The number of hits per period relative to the length of the time period (as a percentage)</p></li>
@@ -103,8 +123,13 @@ that the accuracy is to less than 64 degrees.</p>
 <dl class="method">
 <dt id="aprspy.APRS.decode_phg">
 <em class="property">static </em><code class="sig-name descname">decode_phg</code><span class="sig-paren">(</span><em class="sig-param">phg: str</em><span class="sig-paren">)</span> &#x2192; Tuple[int, int, int, Optional[int]]<a class="headerlink" href="#aprspy.APRS.decode_phg" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parse a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
+<dd><p>Decode a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
 individual values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>phg</strong> (<em>str</em>) – a PHG value, minus the initial <code class="docutils literal notranslate"><span class="pre">PHG</span></code> identifier</p>
+</dd>
+</dl>
 <dl class="simple">
 <dt>The PHG extension provides a way of specifying approximate values for:-</dt><dd><ul class="simple">
 <li><p>Power (in watts)</p></li>
@@ -121,8 +146,13 @@ As per the APRS spec, the height value can be any ASCII character from 0 upwards
 
 <dl class="method">
 <dt id="aprspy.APRS.decode_timestamp">
-<em class="property">static </em><code class="sig-name descname">decode_timestamp</code><span class="sig-paren">(</span><em class="sig-param">raw_timestamp</em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#aprspy.APRS.decode_timestamp" title="Permalink to this definition">¶</a></dt>
+<em class="property">static </em><code class="sig-name descname">decode_timestamp</code><span class="sig-paren">(</span><em class="sig-param">raw_timestamp: str</em><span class="sig-paren">)</span> &#x2192; int<a class="headerlink" href="#aprspy.APRS.decode_timestamp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Decode a timestamp.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>raw_timestamp</strong> (<em>str</em>) – a string representing a timestamp</p>
+</dd>
+</dl>
 <dl class="simple">
 <dt>Timestamps can take a number of different forms:-</dt><dd><ul class="simple">
 <li><p>Zulu, identified with a trailing ‘z’, which refers to zulu time</p></li>
@@ -138,6 +168,11 @@ As per the APRS spec, the height value can be any ASCII character from 0 upwards
 <em class="property">static </em><code class="sig-name descname">decode_uncompressed_latitude</code><span class="sig-paren">(</span><em class="sig-param">latitude: str</em><span class="sig-paren">)</span> &#x2192; Tuple[Union[int, float], int]<a class="headerlink" href="#aprspy.APRS.decode_uncompressed_latitude" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convert an uncompressed latitude string to a latitude and an ambiguity
 value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>latitude</strong> (<em>str</em>) – an uncompressed latitude, in the form <code class="docutils literal notranslate"><span class="pre">DDMM.HHC</span></code></p>
+</dd>
+</dl>
 <dl class="simple">
 <dt>Uncompressed latitudes have the format DDMM.HHC, where:-</dt><dd><ul class="simple">
 <li><p>DD are the degrees</p></li>
@@ -157,6 +192,14 @@ ambiguity (C6 P24).</p>
 <em class="property">static </em><code class="sig-name descname">decode_uncompressed_longitude</code><span class="sig-paren">(</span><em class="sig-param">longitude: str</em>, <em class="sig-param">ambiguity: int = 0</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#aprspy.APRS.decode_uncompressed_longitude" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convert an uncompressed longitude string to a longitude value, with an
 optional ambiguity level applied.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>longitude</strong> (<em>str</em>) – the longitude, in the format <code class="docutils literal notranslate"><span class="pre">DDDMM.HHC</span></code></p></li>
+<li><p><strong>ambiguity</strong> (<em>int</em>) – the level of ambiguity, between 1 and 4</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="simple">
 <dt>Uncompressed longitudes have the format DDDMM.HHC, where:-</dt><dd><ul class="simple">
 <li><p>DD are the degrees</p></li>
@@ -171,9 +214,82 @@ honoured regardless of the precision of the longitude given (as per C6 P24).</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="aprspy.APRS.encode_dfs">
+<em class="property">static </em><code class="sig-name descname">encode_dfs</code><span class="sig-paren">(</span><em class="sig-param">strength: int, height: int, gain: int, directivity: Union[int, str]</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#aprspy.APRS.encode_dfs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode a DFS (Omni-DF Signal Strength) value from individual values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>strength</strong> (<em>int</em>) – the received signal strength, in S-points</p></li>
+<li><p><strong>height</strong> (<em>int</em>) – the antenna height, in feet</p></li>
+<li><p><strong>gain</strong> (<em>int</em>) – the antenna gain, in dB</p></li>
+<li><p><strong>directivity</strong> (<em>int/str</em>) – the antenna directivity, in degrees, or <code class="docutils literal notranslate"><span class="pre">omni</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p>For more information, see <a class="reference internal" href="#aprspy.APRS.decode_dfs" title="aprspy.APRS.decode_dfs"><code class="xref py py-func docutils literal notranslate"><span class="pre">decode_dfs()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.encode_phg">
+<em class="property">static </em><code class="sig-name descname">encode_phg</code><span class="sig-paren">(</span><em class="sig-param">power: int, height: int, gain: int, directivity: Union[int, str]</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#aprspy.APRS.encode_phg" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode a PHG (Power, Effective Antenna Height/Gain/Directivity) value from individual
+values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>power</strong> (<em>int</em>) – the power, in watts</p></li>
+<li><p><strong>height</strong> (<em>int</em>) – the antenna height, in feet</p></li>
+<li><p><strong>gain</strong> (<em>int</em>) – the antenna gain, in dB</p></li>
+<li><p><strong>directivity</strong> (<em>int/str</em>) – the antenna directivity, in degrees</p></li>
+</ul>
+</dd>
+</dl>
+<p>For more information, see <a class="reference internal" href="#aprspy.APRS.decode_phg" title="aprspy.APRS.decode_phg"><code class="xref py py-func docutils literal notranslate"><span class="pre">decode_phg()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.encode_uncompressed_latitude">
+<em class="property">static </em><code class="sig-name descname">encode_uncompressed_latitude</code><span class="sig-paren">(</span><em class="sig-param">latitude: float</em>, <em class="sig-param">ambiguity: int = 0</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#aprspy.APRS.encode_uncompressed_latitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode a latitude into an uncompressed latitude format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>latitude</strong> (<em>float</em>) – a latitude</p></li>
+<li><p><strong>ambiguity</strong> (<em>int</em>) – an optional ambiguity level</p></li>
+</ul>
+</dd>
+</dl>
+<p>For more information see <a class="reference internal" href="#aprspy.APRS.decode_uncompressed_latitude" title="aprspy.APRS.decode_uncompressed_latitude"><code class="xref py py-func docutils literal notranslate"><span class="pre">decode_uncompressed_latitude()</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
+<dt id="aprspy.APRS.encode_uncompressed_longitude">
+<em class="property">static </em><code class="sig-name descname">encode_uncompressed_longitude</code><span class="sig-paren">(</span><em class="sig-param">longitude: float</em>, <em class="sig-param">ambiguity: int = 0</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#aprspy.APRS.encode_uncompressed_longitude" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode a longitude into an uncompressed longitude format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>longitude</strong> (<em>float</em>) – a longitude</p></li>
+<li><p><strong>ambiguity</strong> (<em>int</em>) – an optional ambiguity level</p></li>
+</ul>
+</dd>
+</dl>
+<p>For more information see <a class="reference internal" href="#aprspy.APRS.decode_uncompressed_latitude" title="aprspy.APRS.decode_uncompressed_latitude"><code class="xref py py-func docutils literal notranslate"><span class="pre">decode_uncompressed_latitude()</span></code></a></p>
+</dd></dl>
+
+<dl class="method">
 <dt id="aprspy.APRS.parse">
 <em class="property">static </em><code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param">packet: str = None</em><span class="sig-paren">)</span> &#x2192; aprspy.APRSPacket<a class="headerlink" href="#aprspy.APRS.parse" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parse an APRS packet, and return a subclass of APRSPacket appropriate for the packet type.</p>
+<dd><p>Parse an APRS packet, and return a subclass of <a class="reference internal" href="#aprspy.APRSPacket" title="aprspy.APRSPacket"><code class="xref py py-class docutils literal notranslate"><span class="pre">APRSPacket</span></code></a> appropriate for the
+packet type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>packet</strong> (<em>str</em>) – a raw packet</p>
+</dd>
+</dl>
+<p>Given a raw packet, this function will return a object that is a subclass of
+<a class="reference internal" href="#aprspy.APRSPacket" title="aprspy.APRSPacket"><code class="xref py py-class docutils literal notranslate"><span class="pre">APRSPacket</span></code></a>.</p>
 </dd></dl>
 
 </dd></dl>
