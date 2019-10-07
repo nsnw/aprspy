@@ -12,10 +12,10 @@ The intention of the module is to provide a way to decode and encode various dif
 Currently supports:-
 
 * Decoding
-  * Standard compressed/uncompressed locations (PositionPacket)
-  * Mic-E locations
-  * Messages
-  * Status reports
+  - Standard compressed/uncompressed locations (PositionPacket)
+  - Mic-E locations
+  - Messages
+  - Status reports
 
 Brief usage explanation::
 
@@ -40,3 +40,4 @@ Brief usage explanation::
    :target: https://travis-ci.org/nsnw/aprspy
 .. |coverage-status| image:: https://coveralls.io/repos/github/nsnw/aprspy/badge.svg?branch=master
    :target: https://coveralls.io/github/nsnw/aprspy?branch=master  
+
