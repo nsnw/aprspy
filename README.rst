@@ -1,6 +1,6 @@
-=======
+=========================================
 aprspy - An APRS packet parser for Python
-=======
+=========================================
 
 |version| |license| |build| |issues| |coverage-status|
 
