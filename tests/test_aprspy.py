@@ -218,7 +218,7 @@ def test_position_packet():
         assert packet.speed == 0
 
         assert packet.symbol_table == "/"
-        assert packet.symbol == "$"
+        assert packet.symbol_id == "$"
 
         assert packet.comment == "/A=005Test packet"
 
@@ -246,7 +246,7 @@ def test_position_packet():
         assert packet.speed == 36.2
 
         assert packet.symbol_table == "/"
-        assert packet.symbol == ">"
+        assert packet.symbol_id == ">"
 
         assert packet.comment == "Test packet"
 
@@ -271,7 +271,7 @@ def test_mice_packet():
     assert packet.altitude == 1086
 
     assert packet.symbol_table == "/"
-    assert packet.symbol == "k"
+    assert packet.symbol_id == "k"
 
     assert packet.comment == "146.850MHz Andy S andy@nsnw.ca="
 
@@ -317,7 +317,7 @@ def test_status_packet():
 
     assert packet.maidenhead_locator == "DO21XA"
     assert packet.symbol_table == "/"
-    assert packet.symbol == "-"
+    assert packet.symbol_id == "-"
     assert packet.status_message == "Test status with 6 digit Maidenhead locator"
 
     raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-'
@@ -330,7 +330,7 @@ def test_status_packet():
 
     assert packet.maidenhead_locator == "DO21XA"
     assert packet.symbol_table == "/"
-    assert packet.symbol == "-"
+    assert packet.symbol_id == "-"
     assert packet.status_message == None
 
     raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/- Test status with 4 digit Maidenhead locator'
@@ -343,7 +343,7 @@ def test_status_packet():
 
     assert packet.maidenhead_locator == "DO21"
     assert packet.symbol_table == "/"
-    assert packet.symbol == "-"
+    assert packet.symbol_id == "-"
     assert packet.status_message == "Test status with 4 digit Maidenhead locator"
 
     raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-'
@@ -356,7 +356,7 @@ def test_status_packet():
 
     assert packet.maidenhead_locator == "DO21"
     assert packet.symbol_table == "/"
-    assert packet.symbol == "-"
+    assert packet.symbol_id == "-"
     assert packet.status_message == None
 
     # Invalid status messages
