@@ -443,7 +443,7 @@ class PositionPacket(APRSPacket):
         # Decode the compression type, which determines what other data the packet provides.
         # The presence of this is mandatory, so any packet without it is invalid.
         try:
-            comp_type = "{:0>8b}".format((ord(data[12])-33))[::-1]
+            comp_type = "{:0>8b}".format(ord(data[12])-33)[::-1]
         except IndexError:
             raise ParseError("Couldn't parse compressed type")
 
@@ -474,7 +474,7 @@ class PositionPacket(APRSPacket):
             # 1.08 to the power of the result, and finally subtracting 1.
             # We round the result to 1 decimal place.
             s = ord(data[11]) - 33
-            speed = round(1.08 ** (s - 1), 1)
+            speed = round((1.08 ** s) - 1, 1)
 
             logger.debug("Course: {} Speed: {}".format(course, speed))
 
