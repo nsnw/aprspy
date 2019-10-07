@@ -3,7 +3,7 @@ import pytest
 from aprspy import APRS, PositionPacket, MICEPacket, StatusPacket, MessagePacket, ParseError
 
 
-def test_uncompressed_latitude():
+def test_decode_uncompressed_latitude():
     # Test uncompressed latitude without ambiguity
     lat, ambiguity = APRS.decode_uncompressed_latitude("4903.55N")
 
@@ -81,7 +81,26 @@ def test_uncompressed_latitude():
         assert False
 
 
-def test_uncompressed_longitude():
+def test_encode_uncompressed_latitude():
+    # Test latitude
+    latitude = APRS.encode_uncompressed_latitude(51.473821)
+    assert latitude == "5128.43N"
+
+    # Test latitude with differing levels of ambiguity
+    latitude = APRS.encode_uncompressed_latitude(51.473821, 1)
+    assert latitude == "5128.4 N"
+
+    latitude = APRS.encode_uncompressed_latitude(51.473821, 2)
+    assert latitude == "5128.  N"
+
+    latitude = APRS.encode_uncompressed_latitude(51.473821, 3)
+    assert latitude == "512 .  N"
+
+    latitude = APRS.encode_uncompressed_latitude(51.473821, 4)
+    assert latitude == "51  .  N"
+
+
+def test_decode_uncompressed_longitude():
     # Test uncompressed longitude without ambiguity
     lng = APRS.decode_uncompressed_longitude("07211.75W")
 
@@ -143,6 +162,25 @@ def test_uncompressed_longitude():
         assert True
     except:
         assert False
+
+
+def test_encode_uncompressed_longitude():
+    # Test longitude
+    longitude = APRS.encode_uncompressed_longitude(-114.434325)
+    assert longitude == "11426.06W"
+
+    # Test longitude with differing levels of ambiguity
+    longitude = APRS.encode_uncompressed_longitude(-114.434325, 1)
+    assert longitude == "11426.0 W"
+
+    longitude = APRS.encode_uncompressed_longitude(-114.434325, 2)
+    assert longitude == "11426.  W"
+
+    longitude = APRS.encode_uncompressed_longitude(-114.434325, 3)
+    assert longitude == "1142 .  W"
+
+    longitude = APRS.encode_uncompressed_longitude(-114.434325, 4)
+    assert longitude == "114  .  W"
 
 
 def test_compressed_latitude():
@@ -489,3 +527,33 @@ def test_invalid_message_packet():
         assert True
     except:
         assert False
+
+
+def decode_phg():
+    (power, height, gain, directivity) = APRS.decode_phg("5132")
+
+    assert power == 25
+    assert height == 20
+    assert gain == 3
+    assert directivity == 90
+
+
+def encode_phg():
+    phg = APRS.encode_phg(power=25, height=20, gain=3, directivity=90)
+
+    assert phg == "5132"
+
+
+def decode_dfs():
+    (strength, height, gain, directivity) = APRS.decode_dfs("2360")
+
+    assert strength == 2
+    assert height == 80
+    assert gain == 6
+    assert directivity == "omni"
+
+
+def encode_dfs():
+    dfs = APRS.encode_dfs(strength=2, height=80, gain=6, directivity="omni")
+
+    assert dfs == "2360"
