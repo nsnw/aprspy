@@ -2,6 +2,7 @@
 
 import re
 import logging
+import math
 
 from hashlib import md5
 from datetime import datetime, timedelta
@@ -383,6 +384,8 @@ class PositionPacket(APRSPacket):
         """
         Parse uncompressed position data from a packet.
 
+        :param str data: the information field of a packet, minus the initial data type identifier
+
         Given the information field of a packet with the initial data type identifier stripped, this
         will parse the latitude, longitude, position abiguity, symbol table and symbol ID, and
         return them in a tuple.
@@ -418,6 +421,8 @@ class PositionPacket(APRSPacket):
             float, float, Optional[float], Optional[float], Optional[float], Optional[float]]:
         """
         Parse compressed position data from a packet.
+
+        :param str data: the information field of a packet, minus the initial data type identifier
 
         Given the information field of a packet with the initial data type identifier stripped, this
         will parse the latitude and longitude, and optionally the altitude, course, speed and radio
@@ -495,6 +500,8 @@ class PositionPacket(APRSPacket):
     def _parse_data(data: str) -> Tuple[str, str, str, int, int, int, str]:
         """
         Parse additional information from the information field.
+
+        :param str data: the information field of a packet, minus the initial data type identifier
 
         Position packets can have additional information in them, such as station power, antenna
         height, antenna gain, etc. These are described in APRS 1.01 C7. This will parse out the raw
@@ -699,9 +706,11 @@ class MICEPacket(PositionPacket):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _decode_latitude(destination) -> Tuple[float, int, bool, str, int, int, int, bool]:
+    def _decode_latitude(destination: str) -> Tuple[float, int, bool, str, int, int, int, bool]:
         """
         Decode the latitude.
+
+        :param str destination: the destination field of a packet
 
         Mic-E packets encode the latitude in the destination field, along with the north/south,
         east/west, longitude offset and message identifier. In addition, the SSID can be used to
@@ -817,9 +826,13 @@ class MICEPacket(PositionPacket):
                 message_c, message_custom)
 
     @staticmethod
-    def _decode_longitude(info, lng_offset, east_west) -> float:
+    def _decode_longitude(info: str, lng_offset: bool, east_west: str) -> float:
         """
         Decode the longitude.
+
+        :param str info: the information field of a packet, minus the initial data type identifier
+        :param bool lng_offset: whether the longitude offset should be applied or not
+        :param str east_west: a single character (``E`` or ``W``) denoting an east or west latitude
 
         The longitude is stored in the 3 characters of the info field immediately following the data
         type identifier. Combined with the east/west and longitude offset values from decoding the
@@ -865,9 +878,11 @@ class MICEPacket(PositionPacket):
         return longitude
 
     @staticmethod
-    def _decode_speed_and_course(info):
+    def _decode_speed_and_course(info: str):
         """
         Decode the speed and course.
+
+        :param str info: the information field of a packet, minus the initial data type identifier
 
         The 3 characters after the longitude characters define the speed and course of the station.
 
@@ -902,7 +917,7 @@ class MICEPacket(PositionPacket):
 
         return (speed, course)
 
-    def _parse(self):
+    def _parse(self) -> bool:
         """
         Parse a Mic-E packet.
 
@@ -965,6 +980,8 @@ class MICEPacket(PositionPacket):
                     self.comment = status_text
         else:
             logger.debug("Packet contains no further information.")
+
+        return True
 
     def __repr__(self):
         if self.source:
@@ -1103,6 +1120,8 @@ class StatusPacket(APRSPacket):
         # TODO - Parse and decode the beam and ERP values
         if self.status_message and re.match(r'[\^].{2}', self.status_message[-3:]):
             logger.debug("Status message heading and power: {}".format(self.status_message[-2:]))
+
+        return True
 
     def __repr__(self):
         if self.source:
@@ -1305,7 +1324,7 @@ class APRS:
     Main APRS class.
 
     This class provides functions for parsing and decoding different kinds of APRS packets.
-    Packet type-specific functions are defined under the different APRSPacket subclasses.
+    Packet type-specific functions are defined under the different :class:`APRSPacket` subclasses.
     """
 
     @staticmethod
@@ -1313,6 +1332,8 @@ class APRS:
         """
         Convert an uncompressed latitude string to a latitude and an ambiguity
         value.
+
+        :param str latitude: an uncompressed latitude, in the form ``DDMM.HHC``
 
         Uncompressed latitudes have the format DDMM.HHC, where:-
          * DD are the degrees
@@ -1375,10 +1396,131 @@ class APRS:
         return (lat, ambiguity)
 
     @staticmethod
+    def encode_uncompressed_latitude(latitude: float, ambiguity: int=0) -> str:
+        """
+        Encode a latitude into an uncompressed latitude format.
+
+        :param float latitude: a latitude
+        :param int ambiguity: an optional ambiguity level
+
+        For more information see :func:`decode_uncompressed_latitude`
+        """
+
+        # The latitude must be a float
+        if type(latitude) is not float:
+            raise ValueError("Latitude must be a float ({} given)".format(type(latitude)))
+
+        # The latitude must be between -90 and 90 inclusive
+        if not -90 <= latitude <= 90:
+            raise ValueError("Latitude must be between -90 and 90 inclusive ({} given)".format(
+                latitude
+            ))
+
+        # The ambiguity must be an int
+        if ambiguity and type(ambiguity) is not int:
+            raise ValueError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
+
+        # The ambiguity must be between 0 and 4 inclusive
+        if ambiguity < 0 or ambiguity > 4:
+            raise ValueError("Ambiguity must be between 0 and 4 inclusive ({} given)".format(
+                ambiguity
+            ))
+
+        # Determine if the latitude is north or south
+        if latitude < 0:
+            # Direction is south
+            direction = "S"
+            latitude *= -1
+        else:
+            direction = "N"
+
+        # Get the degrees of latitude
+        degrees = math.floor(latitude)
+
+        # Get the minutes of latitude
+        minutes = "{:0.2f}".format(round((latitude - degrees) * 60, 2)).zfill(5)
+
+        # Apply ambiguity
+        if ambiguity == 0:
+            lat = "{}{}".format(degrees, minutes)
+        elif ambiguity == 1:
+            lat = "{}{} ".format(degrees, minutes[:-1])
+        elif ambiguity == 2:
+            lat = "{}{}  ".format(degrees, minutes[:-2])
+        elif ambiguity == 3:
+            lat = "{}{} .  ".format(degrees, minutes[:-4])
+        elif ambiguity == 4:
+            lat = "{}  .  ".format(degrees)
+
+        return f"{lat}{direction}"
+
+    @staticmethod
+    def encode_uncompressed_longitude(longitude: float, ambiguity: int=0) -> str:
+        """
+        Encode a longitude into an uncompressed longitude format.
+
+        :param float longitude: a longitude
+        :param int ambiguity: an optional ambiguity level
+
+        For more information see :func:`decode_uncompressed_latitude`
+        """
+
+        # The longitude must be a float
+        if type(longitude) is not float:
+            raise ValueError("Longitude must be a float ({} given)".format(type(longitude)))
+
+        # The longitude must be between -180 and 180 inclusive
+        if not -180 <= longitude <= 180:
+            raise ValueError("Longitude must be between -180 and 180 inclusive ({} given)".format(
+                longitude
+            ))
+
+        # The ambiguity must be an int
+        if ambiguity and type(ambiguity) is not int:
+            raise ValueError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
+
+        # The ambiguity must be between 0 and 4 inclusive
+        if ambiguity < 0 or ambiguity > 4:
+            raise ValueError("Ambiguity must be between 0 and 4 inclusive ({} given)".format(
+                ambiguity
+            ))
+
+        # Determine if the longitude is east or west
+        if longitude < 0:
+            # Direction is south
+            direction = "W"
+            longitude *= -1
+        else:
+            direction = "E"
+
+        # Get the degrees of longitude
+        degrees = math.floor(longitude)
+
+        # Get the minutes of longitude
+        minutes = "{:0.2f}".format(round((longitude - degrees) * 60, 2)).zfill(5)
+
+        # Apply ambiguity
+        if ambiguity == 0:
+            lng = "{}{}".format(degrees, minutes)
+        elif ambiguity == 1:
+            lng = "{}{} ".format(degrees, minutes[:-1])
+        elif ambiguity == 2:
+            lng = "{}{}  ".format(degrees, minutes[:-2])
+        elif ambiguity == 3:
+            lng = "{}{} .  ".format(degrees, minutes[:-4])
+        elif ambiguity == 4:
+            lng = "{}  .  ".format(degrees)
+
+        return f"{lng}{direction}"
+
+    @staticmethod
     def decode_uncompressed_longitude(longitude: str, ambiguity: int = 0) -> float:
         """
         Convert an uncompressed longitude string to a longitude value, with an
         optional ambiguity level applied.
+
+        :param str longitude: the longitude, in the format ``DDDMM.HHC``
+        :param int ambiguity: the level of ambiguity, between 1 and 4
 
         Uncompressed longitudes have the format DDDMM.HHC, where:-
          * DD are the degrees
@@ -1465,6 +1607,8 @@ class APRS:
         """
         Convert a compressed latitude string to a latitude value.
 
+        :param str latitude: a latitude in a compressed format
+
         Compressed latitudes have the format YYYY, where all values are base-91
         printable ASCII characters.
 
@@ -1502,6 +1646,8 @@ class APRS:
         """
         Convert a compressed longitutde string latitude value.
 
+        :param str longitude: a longitude in compressed format
+
         Compressed longitude have the format XXXX, where all values are base-91
         printable ASCII characters
 
@@ -1527,9 +1673,11 @@ class APRS:
         return lng
 
     @staticmethod
-    def decode_timestamp(raw_timestamp) -> int:
+    def decode_timestamp(raw_timestamp: str) -> int:
         """
         Decode a timestamp.
+
+        :param str raw_timestamp: a string representing a timestamp
 
         Timestamps can take a number of different forms:-
          * Zulu, identified with a trailing 'z', which refers to zulu time
@@ -1632,8 +1780,10 @@ class APRS:
     @staticmethod
     def decode_phg(phg: str) -> Tuple[int, int, int, Optional[int]]:
         """
-        Parse a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
+        Decode a PHG (Power, Effective Antenna Height/Gain/Directivity) value and return the
         individual values.
+
+        :param str phg: a PHG value, minus the initial ``PHG`` identifier
 
         The PHG extension provides a way of specifying approximate values for:-
          * Power (in watts)
@@ -1674,15 +1824,77 @@ class APRS:
             directivity = None
             logger.debug(f"Directivity is omnidirectional")
         else:
-            directivity = (360/8) * int(phg[3])
+            directivity = int((360/8) * int(phg[3]))
             logger.debug(f"Directivity is {directivity} degrees")
 
         return (power, height, gain, directivity)
 
     @staticmethod
+    def encode_phg(power: int, height: int, gain: int, directivity: Union[int, str]) -> str:
+        """
+        Encode a PHG (Power, Effective Antenna Height/Gain/Directivity) value from individual
+        values.
+
+        :param int power: the power, in watts
+        :param int height: the antenna height, in feet
+        :param int gain: the antenna gain, in dB
+        :param int/str directivity: the antenna directivity, in degrees
+
+        For more information, see :func:`decode_phg`.
+        """
+
+        # Validate the given values
+        # Power must be a value between 0 to 9 squared
+        if power not in [v ** 2 for v in range(0, 10)]:
+            raise ValueError("Power must be one of {} ({} given)".format(
+                [v ** 2 for v in range(0, 10)], power
+            ))
+        else:
+            p = int(math.sqrt(power))
+            logger.debug(f"Encoded power {power} is {p}")
+
+        # Antenna height must be a value that is 2 raised to the power of the ASCII value higher
+        # than or equal to '0' minus 48, then multiplied by 10
+        if height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
+            raise ValueError("Height must be one of {} ({} given)".format(
+                [(2 ** (v-48))*10 for v in range(48, 127)]
+            ))
+        else:
+            h = chr(int((math.log((height/10), 2)+48)))
+
+        # Antenna gain must be a number between 0 and 9 inclusive
+        if not 0 <= gain <= 9:
+            raise ValueError("Gain must be between 0 and 9 inclusive ({} given)".format(
+                gain
+            ))
+        else:
+            g = gain
+
+        # Directivity must be a multiple of 45
+        if directivity == "omni":
+            d = 0
+        elif type(directivity) is int:
+            if directivity % (360/8) != 0.0:
+                raise ValueError("Directivity must be a multiple of 45 ({} given)".format(
+                    directivity
+                ))
+            else:
+                d = int(directivity / 45)
+        else:
+            raise ValueError(
+                "Directivity must either be 'omni' or a multiple of 45 ({} given)".format(
+                    directivity
+                ))
+
+        # Return the encoded PHG value
+        return f"{p}{h}{g}{d}"
+
+    @staticmethod
     def decode_dfs(dfs: str) -> Tuple[int, int, int, Optional[int]]:
         """
-        Parse a DFS (Omni-DF Signal Strength) value and return the individual values.
+        Decode a DFS (Omni-DF Signal Strength) value and return the individual values.
+
+        :param str dfs: a DFS value, minus the initial ``DFS`` identifier
 
         The DFS extension provides a way of specifying approximate values for:-
          * Received signal strength (in S-points)
@@ -1730,9 +1942,68 @@ class APRS:
         return (strength, height, gain, directivity)
 
     @staticmethod
+    def encode_dfs(strength: int, height: int, gain: int, directivity: Union[int, str]) -> str:
+        """
+        Encode a DFS (Omni-DF Signal Strength) value from individual values.
+
+        :param int strength: the received signal strength, in S-points
+        :param int height: the antenna height, in feet
+        :param int gain: the antenna gain, in dB
+        :param int/str directivity: the antenna directivity, in degrees, or ``omni``
+
+        For more information, see :func:`decode_dfs`.
+        """
+
+        # Signal strength must be a digit between 0 and 9 inclusive
+        if type(strength) is not int or 0 <= strength <= 9:
+            raise ValueError(
+                "Signal strength must be an int between 0 and 9 inclusive ({} given)".format(
+                    strength
+                ))
+        else:
+            s = strength
+
+        # Antenna height must be a value that is 2 raised to the power of the ASCII value higher
+        # than or equal to '0' minus 48, then multiplied by 10
+        if height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
+            raise ValueError("Height must be one of {} ({} given)".format(
+                [(2 ** (v-48))*10 for v in range(48, 127)]
+            ))
+        else:
+            h = chr(int((math.log((height/10), 2)+48)))
+
+        # Antenna gain must be a number between 0 and 9 inclusive
+        if not 0 <= gain <= 9:
+            raise ValueError("Gain must be between 0 and 9 inclusive ({} given)".format(
+                gain
+            ))
+        else:
+            g = gain
+
+        # Directivity must be a multiple of 45
+        if directivity == "omni":
+            d = 0
+        elif type(directivity) is int:
+            if directivity % (360/8) != 0.0:
+                raise ValueError("Directivity must be a multiple of 45 ({} given)".format(
+                    directivity
+                ))
+            else:
+                d = int(directivity / 45)
+        else:
+            raise ValueError(
+                "Directivity must either be 'omni' or a multiple of 45 ({} given)".format(
+                    directivity
+                ))
+
+        return f"{s}{g}{h}{d}"
+
+    @staticmethod
     def decode_nrq(nrq: str) -> Tuple[Optional[Union[float, str]], Optional[int], Optional[int]]:
         """
         Parse an NRQ (Number/Range/Quality) value and return the individual values.
+
+        :param str nrq: an NRQ value
 
         For direction-finding reports, the NRQ value provides:-
          * The number of hits per period relative to the length of the time period (as a percentage)
@@ -1791,7 +2062,13 @@ class APRS:
     @staticmethod
     def parse(packet: str = None) -> "APRSPacket":
         """
-        Parse an APRS packet, and return a subclass of APRSPacket appropriate for the packet type.
+        Parse an APRS packet, and return a subclass of :class:`APRSPacket` appropriate for the
+        packet type.
+
+        :param str packet: a raw packet
+
+        Given a raw packet, this function will return a object that is a subclass of
+        :class:`APRSPacket`.
         """
 
         try:
