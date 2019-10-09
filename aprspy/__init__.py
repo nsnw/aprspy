@@ -10,28 +10,11 @@ from geopy.point import Point
 
 from typing import Union, List, Tuple, Optional
 
+from .exceptions import ParseError, UnsupportedError
+from .components import Path
+
 # Set up logging
 logger = logging.getLogger(__name__)
-
-
-class ParseError(Exception):
-    """
-    Parsing exception
-    """
-    def __init__(self, message: str, packet=None):
-        super(ParseError, self).__init__(message)
-
-        self.packet = packet
-
-
-class UnsupportedError(Exception):
-    """
-    Thrown when packets are of an unsupported format
-    """
-    def __init__(self, message: str, packet=None):
-        super(UnsupportedError, self).__init__(message)
-
-        self.packet = packet
 
 
 class APRSPacket:
@@ -45,6 +28,9 @@ class APRSPacket:
     def __init__(self, source: str = None, destination: str = None, path: str = None,
                  info: str = None, raw: str = None, timestamp: str = None, data_type_id: str = None,
                  symbol_table: str = None, symbol: str = None):
+        # list to hold the path hops
+        self._path_hops = []
+
         # If raw is given, only set that
         if raw:
             self._raw = raw
@@ -52,7 +38,9 @@ class APRSPacket:
             # Set source, destination, path and info (if given)
             self._source = source
             self._destination = destination
-            self._path = path
+
+            if path:
+                self.path = path
             self._info = info
 
             # If info isn't specified, set the timestamp, data, data type, data type ID,
@@ -83,7 +71,24 @@ class APRSPacket:
     @source.setter
     def source(self, value: str):
         """Set the source address of the packet"""
-        self._source = value
+        # Ensure the source is a str and a maximum of 9 characters
+        if type(value) is str and len(value) <= 9:
+            self._source = value
+        else:
+            raise ValueError("Source must of type 'str' and a maximum of 9 characters")
+
+    @property
+    def source_callsign(self) -> str:
+        """Get the destination callsign (without any SSID)"""
+        return self.source.split("-")[0]
+
+    @property
+    def source_ssid(self) -> str:
+        """Get the source callsign's SSID"""
+        if "-" in self.source:
+            return self.source.split("-")[1]
+        else:
+            return None
 
     @property
     def destination(self) -> str:
@@ -93,17 +98,39 @@ class APRSPacket:
     @destination.setter
     def destination(self, value: str):
         """Set the destination address of the packet"""
-        self._destination = value
+        # Ensure the destination is a str and a maximum of 9 characters
+        if type(value) is str and len(value) <= 9:
+            self._destination = value
+        else:
+            raise ValueError("Destination must be of type 'str' and a maximum of 9 characters")
 
     @property
-    def path(self) -> str:
+    def destination_callsign(self) -> str:
+        """Get the destination callsign (without any SSID)"""
+        return self.destination.split("-")[0]
+
+    @property
+    def destination_ssid(self) -> str:
+        """Get the destination callsign's SSID"""
+        if "-" in self.destination:
+            return self.destination.split("-")[1]
+        else:
+            return None
+
+    @property
+    def path(self) -> Path:
         """Get the path of the packet"""
         return self._path
 
     @path.setter
-    def path(self, value: str):
+    def path(self, value: Union[str, Path]):
         """Set the path for the packet"""
-        self._path = value
+        if type(value) is str:
+            self._path = Path(path=value)
+        elif type(value) is Path:
+            self._path = value
+        else:
+            raise ValueError("Path must be of type 'str' or 'Path' ({} given)".format(type(value)))
 
     @property
     def info(self) -> str:
@@ -146,13 +173,13 @@ class APRSPacket:
         self._symbol_table = value
 
     @property
-    def symbol(self) -> str:
-        """Get the symbol of the packet"""
+    def symbol_id(self) -> str:
+        """Get the symbol ID of the packet"""
         return self._symbol
 
-    @symbol.setter
-    def symbol(self, value: str):
-        """Set the symbol of the packet"""
+    @symbol_id.setter
+    def symbol_id(self, value: str):
+        """Set the symbol ID of the packet"""
         self._symbol = value
 
     def _dump(self):
