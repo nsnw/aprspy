@@ -246,7 +246,7 @@ def test_position_packet():
 
         assert packet.source == "XX1XX"
         assert packet.destination == "APRS"
-        assert packet.path == "TCPIP*,qAC,FOURTH"
+        assert str(packet.path) == "TCPIP*,qAC,FOURTH"
 
         assert packet.latitude == raw[1]
         assert packet.longitude == raw[2]
@@ -274,7 +274,7 @@ def test_position_packet():
 
         assert packet.source == "XX1XX"
         assert packet.destination == "APRS"
-        assert packet.path == "TCPIP*,qAC,FOURTH"
+        assert str(packet.path) == "TCPIP*,qAC,FOURTH"
 
         assert packet.latitude == raw[1]
         assert packet.longitude == raw[2]
@@ -299,7 +299,7 @@ def test_mice_packet():
 
     assert packet.source == "VE6LY-9"
     assert packet.destination == "U1PRSS-1"
-    assert packet.path == "WIDE1-1,WIDE2-2,qAR,CALGRY"
+    assert str(packet.path) == "WIDE1-1,WIDE2-2,qAR,CALGRY"
 
     assert packet.latitude == 51.038833
     assert packet.longitude == -114.073667
@@ -430,7 +430,7 @@ def test_message_packet():
 
     assert packet.source == "XX1XX-1"
     assert packet.destination == "APRS"
-    assert packet.path == "TCPIP*,qAC,TEST"
+    assert str(packet.path) == "TCPIP*,qAC,TEST"
 
     assert packet.addressee == "YY9YY-9"
     assert packet.message == "This is a test message"
@@ -448,7 +448,7 @@ def test_bulletin_packet():
 
     assert packet.source == "XX1XX-1"
     assert packet.destination == "APRS"
-    assert packet.path == "TCPIP*,qAC,TEST"
+    assert str(packet.path) == "TCPIP*,qAC,TEST"
 
     assert packet.addressee == "BLN3"
     assert packet.bulletin is True
@@ -467,7 +467,7 @@ def test_announcement_packet():
 
     assert packet.source == "XX1XX-1"
     assert packet.destination == "APRS"
-    assert packet.path == "TCPIP*,qAC,TEST"
+    assert str(packet.path) == "TCPIP*,qAC,TEST"
 
     assert packet.addressee == "BLNQ"
     assert packet.bulletin is True
@@ -486,7 +486,7 @@ def test_group_bulletin_packet():
 
     assert packet.source == "XX1XX-1"
     assert packet.destination == "APRS"
-    assert packet.path == "TCPIP*,qAC,TEST"
+    assert str(packet.path) == "TCPIP*,qAC,TEST"
 
     assert packet.addressee == "BLN4WX"
     assert packet.bulletin is True
