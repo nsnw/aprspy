@@ -13,6 +13,8 @@ from typing import Union, List, Tuple, Optional
 from .exceptions import ParseError, UnsupportedError
 from .components import Path
 
+__version__ = "0.1.3"
+
 # Set up logging
 logger = logging.getLogger(__name__)
 

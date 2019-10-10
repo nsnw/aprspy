@@ -14,12 +14,16 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
+from aprspy import __version__
+
 
 # -- Project information -----------------------------------------------------
 
 project = 'aprspy'
 copyright = '2019, Andy Smith'
 author = 'Andy Smith'
+version = __version__
+release = __version__
 
 
 # -- General configuration ---------------------------------------------------
