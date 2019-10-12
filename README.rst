@@ -2,7 +2,7 @@
 aprspy - An APRS packet parser for Python
 =========================================
 
-|version| |license| |build| |issues| |coverage-status|
+|version| |license| |build| |docs| |issues| |coverage-status|
 
 Introduction
 ------------
@@ -40,4 +40,5 @@ Brief usage explanation::
    :target: https://travis-ci.org/nsnw/aprspy
 .. |coverage-status| image:: https://coveralls.io/repos/github/nsnw/aprspy/badge.svg?branch=master
    :target: https://coveralls.io/github/nsnw/aprspy?branch=master  
-
+.. |docs| image:: https://readthedocs.org/projects/aprspy/badge/?version=latest
+   :target: https://aprspy.readthedocs.io/en/latest/?badge=latest
