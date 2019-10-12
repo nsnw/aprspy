@@ -1,5 +1,5 @@
-aprspy
-======
+Components
+==========
 
 .. autoclass:: aprspy.components.Station
       :members:

@@ -1,5 +1,5 @@
-aprspy
-======
+Exceptions
+==========
 
 .. autoclass:: aprspy.exceptions.ParseError
       :members:
