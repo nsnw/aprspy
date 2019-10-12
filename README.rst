@@ -11,11 +11,20 @@ The intention of the module is to provide a way to decode and encode various dif
 
 Currently supports:-
 
-* Decoding
-  - Standard compressed/uncompressed locations (PositionPacket)
-  - Mic-E locations
-  - Messages
-  - Status reports
+- Decoding
+  - Standard compressed/uncompressed location packets (PositionPacket)
+  - Mic-E location packets (MICEPacket)
+  - Message packets (MessagePacket)
+  - Status report packets (StatusPacket)
+
+- Encoding
+  - Compressed/uncompressed locations
+  - PHG/DFS/RNG values
+
+Note that encoding entire packets is planned, but not yet supported.
+
+Usage
+-----
 
 Brief usage explanation::
 
@@ -29,6 +38,23 @@ Brief usage explanation::
    -100.338333
    >>> packet.course
    221
+
+Documentation
+-------------
+
+Documentation can be found at https://aprspy.readthedocs.io/en/latest/.
+
+Development
+-----------
+
+Dependencies needed for development can be installed with ``pip install -r dev-requirements.txt``.
+
+The documentation can be built locally by running ``make`` in the ``docs/`` folder.
+
+Copyright
+---------
+
+This module is released under the MIT License, and is copyright 2019 Andy Smith <andy@nsnw.ca>
 
 .. |version| image:: https://img.shields.io/pypi/v/aprspy.svg
    :target: https://pypi.python.org/pypi/aprspy
