@@ -11,7 +11,7 @@ from geopy.point import Point
 from typing import Union, List, Tuple, Optional
 
 from .exceptions import ParseError, UnsupportedError
-from .components import Path
+from .components import Path, Station
 
 __version__ = "0.1.3"
 
@@ -28,96 +28,69 @@ class APRSPacket:
     """
 
     def __init__(self, source: str = None, destination: str = None, path: str = None,
-                 info: str = None, raw: str = None, timestamp: str = None, data_type_id: str = None,
-                 symbol_table: str = None, symbol: str = None):
+                 info: str = None):
         # list to hold the path hops
         self._path_hops = []
+        self._source = None
+        self._destination = None
+        self._path = None
+        self._info = None
 
-        # If raw is given, only set that
-        if raw:
-            self._raw = raw
-        else:
-            # Set source, destination, path and info (if given)
-            self._source = source
-            self._destination = destination
+        # Set source, destination, path and info (if given)
+        self.source = source
+        self.destination = destination
+        self.path = path
+        self.info = info
 
-            if path:
-                self.path = path
-            self._info = info
-
-            # If info isn't specified, set the timestamp, data, data type, data type ID,
-            # symbol table and symbol (if given)
-            if not info:
-                self._timestamp = timestamp
-                self._data_type_id = data_type_id
-                self._symbol_table = symbol_table
-                self._symbol = symbol
-
-        self._checksum = None
+        self.checksum = None
 
     @property
-    def raw(self) -> str:
-        """Get the raw data of the packet in TNC2 format"""
-        return self._raw
-
-    @raw.setter
-    def raw(self, value: str):
-        """Set the raw data of the packet in TNC2 format"""
-        self._raw = value
-
-    @property
-    def source(self) -> str:
+    def source(self) -> Station:
         """Get the source address of the packet"""
         return self._source
 
     @source.setter
-    def source(self, value: str):
+    def source(self, value: Union[str, Station]):
         """Set the source address of the packet"""
-        # Ensure the source is a str and a maximum of 9 characters
-        if type(value) is str and len(value) <= 9:
+        if type(value) is str:
+            # Passed a str
+            if len(value) <= 9:
+                self._source = value
+            else:
+                raise ValueError("Source must be a maximum of 9 characters")
+        elif type(value) is Station:
+            # Passed a Station
             self._source = value
+        elif value is None:
+            # Passed None
+            self._source = None
         else:
-            raise ValueError("Source must of type 'str' and a maximum of 9 characters")
+            raise TypeError("Source must either be 'str' or 'Station' ({} given)".format(
+                type(value)
+            ))
 
     @property
-    def source_callsign(self) -> str:
-        """Get the destination callsign (without any SSID)"""
-        return self.source.split("-")[0]
-
-    @property
-    def source_ssid(self) -> str:
-        """Get the source callsign's SSID"""
-        if "-" in self.source:
-            return self.source.split("-")[1]
-        else:
-            return None
-
-    @property
-    def destination(self) -> str:
+    def destination(self) -> Station:
         """Get the destination address of the packet"""
         return self._destination
 
     @destination.setter
-    def destination(self, value: str):
+    def destination(self, value: Union[str, Station]):
         """Set the destination address of the packet"""
-        # Ensure the destination is a str and a maximum of 9 characters
-        if type(value) is str and len(value) <= 9:
+        if type(value) is str:
+            # Passed a str
+            if len(value) <= 9:
+                self._destination = value
+            else:
+                raise ValueError("Destination must be a maximum of 9 character")
+        elif type(value) is Station:
+            # Passed a Station
             self._destination = value
+        elif value is None:
+            # Passed None
+            self._destination = None
         else:
-            raise ValueError("Destination must be of type 'str' and a maximum of 9 characters")
-
-    @property
-    def destination_callsign(self) -> str:
-        """Get the destination callsign (without any SSID)"""
-        return self.destination.split("-")[0]
-
-    @property
-    def destination_ssid(self) -> str:
-        """Get the destination callsign's SSID"""
-        if "-" in self.destination:
-            return self.destination.split("-")[1]
-        else:
-            return None
+            raise TypeError("Destination must be of type 'str' and a maximum of 9 characters")
 
     @property
     def path(self) -> Path:
@@ -131,8 +104,10 @@ class APRSPacket:
             self._path = Path(path=value)
         elif type(value) is Path:
             self._path = value
+        elif value is None:
+            self._path = None
         else:
-            raise ValueError("Path must be of type 'str' or 'Path' ({} given)".format(type(value)))
+            raise TypeError("Path must be of type 'str' or 'Path' ({} given)".format(type(value)))
 
     @property
     def info(self) -> str:
@@ -183,13 +158,6 @@ class APRSPacket:
     def symbol_id(self, value: str):
         """Set the symbol ID of the packet"""
         self._symbol = value
-
-    def _dump(self):
-        raw_codes = []
-        for raw in self.raw:
-            raw_codes.append(ord(raw))
-
-        return raw_codes
 
     def __repr__(self):
         if self.source:
@@ -407,7 +375,6 @@ class PositionPacket(APRSPacket):
         # TODO - Ensure that this is valid
         self._quality = value
 
-
     @staticmethod
     def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
         """
@@ -416,7 +383,7 @@ class PositionPacket(APRSPacket):
         :param str data: the information field of a packet, minus the initial data type identifier
 
         Given the information field of a packet with the initial data type identifier stripped, this
-        will parse the latitude, longitude, position abiguity, symbol table and symbol ID, and
+        will parse the latitude, longitude, position ambiguity, symbol table and symbol ID, and
         return them in a tuple.
         """
         # Decode the latitude and ambiguity
@@ -429,21 +396,18 @@ class PositionPacket(APRSPacket):
             lat, ambiguity, lng
         ))
 
-        try:
-            # Parse the symbol table
-            symbol_table = data[8]
-            logger.debug("Symbol table: {}".format(symbol_table))
-        except IndexError:
-            raise ParseError("Missing symbol table identifier")
+        # Parse the symbol table
+        symbol_table = data[8]
+        logger.debug("Symbol table: {}".format(symbol_table))
 
         try:
             # Parse the symbol ID
-            symbol = data[18]
-            logger.debug("Symbol: {}".format(symbol))
+            symbol_id = data[18]
+            logger.debug("Symbol: {}".format(symbol_id))
         except IndexError:
             raise ParseError("Missing symbol identifier")
 
-        return (lat, lng, ambiguity, symbol_table, symbol)
+        return (lat, lng, ambiguity, symbol_table, symbol_id)
 
     @staticmethod
     def _parse_compressed_position(data: str) -> Tuple[
@@ -457,6 +421,10 @@ class PositionPacket(APRSPacket):
         will parse the latitude and longitude, and optionally the altitude, course, speed and radio
         range.
         """
+
+        if len(data) < 13:
+            raise ValueError("Compressed position data must be at least 13 character")
+
         logger.debug("Compressed lat/lng is: {}".format(data))
 
         # Parse the compressed latitude and longitude character from the packet
@@ -470,11 +438,7 @@ class PositionPacket(APRSPacket):
         logger.debug("Latitude: {} Longitude: {}".format(latitude, longitude))
 
         # Decode the compression type, which determines what other data the packet provides.
-        # The presence of this is mandatory, so any packet without it is invalid.
-        try:
-            comp_type = "{:0>8b}".format(ord(data[12])-33)[::-1]
-        except IndexError:
-            raise ParseError("Couldn't parse compressed type")
+        comp_type = "{:0>8b}".format(ord(data[12])-33)[::-1]
 
         altitude = None
         course = None
@@ -482,14 +446,18 @@ class PositionPacket(APRSPacket):
         radio_range = None
 
         # Check for altitude, course/speed or radio range
-        if comp_type[3] == "0" and comp_type[4] == "1":
+        if data[10] == " ":
+            # If the 11th character is blank, then don't do any further parsing
+            logger.debug("No course, speed or range data")
+
+        elif comp_type[3] == "0" and comp_type[4] == "1":
             # The altitude is obtained by subtracting 33 from the ASCII value for the c and s
             # characters, multiplying c by 91, adding s, and then raising 1.002 to the power of the
             # result.
             # See APRS 1.01 C9 P40
             c = ord(data[10]) - 33
             s = ord(data[11]) - 33
-            altitude = (1.002 ** (c * 91 + s))
+            altitude = round((1.002 ** (c * 91 + s)), 2)
 
             logger.debug("Altitude: {}".format(altitude))
 
@@ -511,15 +479,12 @@ class PositionPacket(APRSPacket):
             # The radio range is obtained by subtracting 33 from the ASCII value of s, raising 1.08
             # to the power of the result, and finally multiplying it by 2.
             s = ord(data[11]) - 33
-            radio_range = 2 * (1.08 ** s)
+            radio_range = round(2 * (1.08 ** s), 2)
 
             logger.debug("Radio range: {}".format(radio_range))
 
-        elif data[10] == " ":
-            logger.debug("No course, speed or range data")
-
         else:
-            raise ParseError("Invalid character when looking for course/speed or range: {}".format(
+            raise ValueError("Invalid character when looking for course/speed or range: {}".format(
                 data[10]
             ))
 
@@ -602,12 +567,11 @@ class PositionPacket(APRSPacket):
 
         if self.data_type_id == '!':
             # Packet has no timestamp, station has no messaging capability
-            timestamp = False
+            self.timestamp = None
             self.messaging = False
 
         elif self.data_type_id == '/':
             # Packet has timestamp, station has no messaging capability
-            timestamp = True
             self.messaging = False
 
             # Parse timestamp
@@ -615,12 +579,11 @@ class PositionPacket(APRSPacket):
 
         elif self.data_type_id == '=':
             # Packet has no timestamp, station has messaging capability
-            timestamp = False
+            self.timestamp = None
             self.messaging = True
 
         elif self.data_type_id == '@':
             # Packet has timestamp, station has messaging capability
-            timestamp = True
             self.messaging = True
 
             # Parse timestamp
@@ -630,7 +593,7 @@ class PositionPacket(APRSPacket):
             # This isn't a position packet
             raise ParseError("Unknown position data type: {}".format(self.data_type_id))
 
-        if timestamp is False:
+        if self.timestamp is None:
             data = self.info[1:]
         else:
             data = self.info[8:]
@@ -1661,6 +1624,7 @@ class APRS:
                 (ord(latitude[2])-33) * 91 +
                 (ord(latitude[3])-33)
             ) / 380926
+            lat = round(lat, 6)
         except IndexError:
             raise ParseError("Couldn't parse compressed latitude {}".format(
                 latitude
@@ -1694,6 +1658,7 @@ class APRS:
                 (ord(longitude[2])-33) * 91 +
                 (ord(longitude[3])-33)
             ) / 190463
+            lng = round(lng, 6)
         except IndexError:
             raise ParseError("Couldn't parse compressed longitude {}".format(longitude))
 
@@ -1768,7 +1733,7 @@ class APRS:
                     # timezone, it's impossible to work out. APRS 1.01 C6 P22 states "It is
                     # recommended that future APRS implementations only transmit zulu format on the
                     # air", so hopefully this shouldn't be a problem in reality.
-                    logger.warn("Local time specified in timestamp, assuming UTC.")
+                    logger.info("Local time specified in timestamp, assuming UTC.")
 
                 # DDHHMM
                 day = int(timestamp[0:2])
@@ -1971,7 +1936,7 @@ class APRS:
         return (strength, height, gain, directivity)
 
     @staticmethod
-    def encode_dfs(strength: int, height: int, gain: int, directivity: Union[int, str]) -> str:
+    def encode_dfs(strength: int, height: int, gain: int, directivity: int = None) -> str:
         """
         Encode a DFS (Omni-DF Signal Strength) value from individual values.
 
@@ -1984,7 +1949,7 @@ class APRS:
         """
 
         # Signal strength must be a digit between 0 and 9 inclusive
-        if type(strength) is not int or 0 <= strength <= 9:
+        if type(strength) is not int or not 0 <= strength <= 9:
             raise ValueError(
                 "Signal strength must be an int between 0 and 9 inclusive ({} given)".format(
                     strength
@@ -2010,7 +1975,7 @@ class APRS:
             g = gain
 
         # Directivity must be a multiple of 45
-        if directivity == "omni":
+        if directivity is None:
             d = 0
         elif type(directivity) is int:
             if directivity % (360/8) != 0.0:
@@ -2025,7 +1990,7 @@ class APRS:
                     directivity
                 ))
 
-        return f"{s}{g}{h}{d}"
+        return f"{s}{h}{g}{d}"
 
     @staticmethod
     def decode_nrq(nrq: str) -> Tuple[Optional[Union[float, str]], Optional[int], Optional[int]]:
@@ -2180,7 +2145,7 @@ class APRS:
         p.info = info
         p.checksum = checksum
         p.data_type_id = data_type_id
-        p.raw = packet
+        p._raw = packet
 
         # Call the packet-specific parser
         p._parse()

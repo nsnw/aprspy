@@ -1,6 +1,184 @@
 import pytest
 
-from aprspy import APRS, PositionPacket, MICEPacket, StatusPacket, MessagePacket, ParseError
+from geopy import Point
+from aprspy import APRS, APRSPacket, PositionPacket, MICEPacket, StatusPacket, MessagePacket,\
+    ParseError
+from aprspy.components import Station, Path, PathHop
+
+
+def test_init_packet():
+    packet = APRSPacket()
+    assert repr(packet) == "<APRSPacket>"
+
+    packet = APRSPacket(source="XX1XX", destination="APRS", path="TCPIP*,qAR,T2TEST",
+                        info=">This is a test status message")
+
+    assert repr(packet) == "<APRSPacket: XX1XX>"
+    assert packet.source == "XX1XX"
+    assert packet.destination == "APRS"
+    assert packet.info == ">This is a test status message"
+
+
+def test_init_position_packet():
+    packet = PositionPacket()
+    point = Point(51, -114, 1000)
+
+    packet.point = point
+    packet.power = 50
+    packet.height = 50
+    packet.gain = 3
+    packet.directivity = 90
+    packet.radio_range = 10
+    packet.strength = 9
+    packet.bearing = 180
+    packet.number = 12.5
+    packet.df_range = 20
+    packet.quality = 1
+
+    assert packet.point == point
+    assert packet.power == 50
+    assert packet.height == 50
+    assert packet.gain == 3
+    assert packet.directivity == 90
+    assert packet.radio_range == 10
+    assert packet.strength == 9
+    assert packet.bearing == 180
+    assert packet.number == 12.5
+    assert packet.df_range == 20
+    assert packet.quality == 1
+
+
+def test_packet_properties():
+    packet = APRSPacket()
+    station = Station(callsign="XX1XX-11")
+    dest = Station(callsign="APRS")
+    path = Path(path="TCPIP*,qAR,T2TEST")
+
+    packet.source = station
+    assert packet.source == station
+
+    packet.destination = dest
+    assert packet.destination == dest
+
+    packet.path = path
+    assert packet.path == path
+
+
+def test_invalid_packet_properties():
+    packet = APRSPacket()
+
+    # Source is too long
+    try:
+        packet.source = "XXX1XXX-11"
+        assert False
+    except ValueError:
+        assert True
+    except Exception:
+        assert False
+
+    # Source type is invalid
+    try:
+        packet.source = 11
+        assert False
+    except TypeError:
+        assert True
+    except Exception:
+        assert False
+
+    # Destination is too long
+    try:
+        packet.destination = "XXX1XXX-11"
+        assert False
+    except ValueError:
+        assert True
+    except Exception:
+        assert False
+
+    # Destination type is invalid
+    try:
+        packet.destination = 11
+        assert False
+    except TypeError:
+        assert True
+    except Exception:
+        assert False
+
+    # Path type is invalid
+    try:
+        packet.path = False
+        assert False
+    except TypeError:
+        assert True
+    except Exception:
+        assert False
+
+
+def test_parse_uncompressed_position():
+    lat, lng, amb, st, sid = PositionPacket._parse_uncompressed_position("5100.00N/11400.00Wk")
+
+    assert lat == 51
+    assert lng == -114
+    assert amb == 0
+    assert st == "/"
+    assert sid == "k"
+
+
+def test_parse_invalid_uncompressed_position():
+    # Missing symbol ID
+    try:
+        PositionPacket._parse_uncompressed_position("5100.00N/11400.00W")
+        assert False
+    except ParseError:
+        assert True
+    except Exception:
+        assert False
+
+
+def test_parse_compressed_position():
+    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+        "/5L!!<*e7OS]S"
+    )
+
+    assert lat == 49.5
+    assert lng == -72.750004
+    assert alt == 10004.52
+
+    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+        "/5L!!<*e7>{?!"
+    )
+
+    assert lat == 49.5
+    assert lng == -72.750004
+    assert radio_range == 20.13
+
+    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+        "/5L!!<*e7> sT"
+    )
+
+    assert lat == 49.5
+    assert lng == -72.750004
+    assert alt == None
+
+
+
+def test_parse_invalid_compressed_position():
+    # Missing symbol ID
+    try:
+        PositionPacket._parse_compressed_position("/5L!!<*e7> s")
+        assert False
+    except ValueError:
+        assert True
+    except Exception:
+        assert False
+
+    # Missing
+    try:
+        PositionPacket._parse_compressed_position("/5L!!<*e7>}AA")
+        assert False
+    except ValueError:
+        assert True
+    except Exception:
+        assert False
 
 
 def test_decode_uncompressed_latitude():
@@ -204,7 +382,7 @@ def test_compressed_longitude():
     # Test compressed longitude
     lng = APRS.decode_compressed_longitude("<*e7")
 
-    assert lng == -72.75000393777269
+    assert lng == -72.750004
 
     # Test invalid input
     try:
@@ -221,20 +399,48 @@ def test_timestamp():
     timestamp = APRS.decode_timestamp("091234z")
 
 
-def test_packet():
-    raw = 'XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005Test packet'
-
-    packet = APRS.parse(raw)
-
-    assert packet.raw == raw
+#def test_packet():
+#    raw = 'XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005Test packet'
+#
+#    packet = APRS.parse(raw)
+#
+#    assert packet.raw == raw
 
 
 def test_position_packet():
     raw_packets = [
-        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005Test packet', 50.508333, -100.338333),
-        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30E$221/000/A=005Test packet', 50.508333, 100.338333),
-        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30W$221/000/A=005Test packet', -50.508333, -100.338333),
-        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30E$221/000/A=005Test packet', -50.508333, 100.338333),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005000Test packet',
+         50.508333, -100.338333, "="),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30E$221/000/A=005000Test packet',
+         50.508333, 100.338333, "="),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30W$221/000/A=005000Test packet',
+         -50.508333, -100.338333, "="),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30E$221/000/A=005000Test packet',
+         -50.508333, 100.338333, "="),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50N/10020.30W$221/000/A=005000Test packet',
+         50.508333, -100.338333, "!", ),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50N/10020.30E$221/000/A=005000Test packet',
+         50.508333, 100.338333, "!"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50S/10020.30W$221/000/A=005000Test packet',
+         -50.508333, -100.338333, "!"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50S/10020.30E$221/000/A=005000Test packet',
+         -50.508333, 100.338333, "!"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50N/10020.30W$221/000/A=005000Test packet',
+         50.508333, -100.338333, "/"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50N/10020.30E$221/000/A=005000Test packet',
+         50.508333, 100.338333, "/"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50S/10020.30W$221/000/A=005000Test packet',
+         -50.508333, -100.338333, "/"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50S/10020.30E$221/000/A=005000Test packet',
+         -50.508333, 100.338333, "/"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:@092345/5030.50N/10020.30W$221/000/A=005000Test packet',
+         50.508333, -100.338333, "@"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:@092345/5030.50N/10020.30E$221/000/A=005000Test packet',
+         50.508333, 100.338333, "@"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:@092345/5030.50S/10020.30W$221/000/A=005000Test packet',
+         -50.508333, -100.338333, "@"),
+        ('XX1XX>APRS,TCPIP*,qAC,FOURTH:@092345/5030.50S/10020.30E$221/000/A=005000Test packet',
+         -50.508333, 100.338333, "@"),
     ]
 
     for raw in raw_packets:
@@ -242,12 +448,13 @@ def test_position_packet():
 
         assert type(packet) == PositionPacket
         assert repr(packet) == f"<PositionPacket: {packet.source}>"
-        assert packet.data_type_id == "="
+        assert packet.data_type_id == raw[3]
 
         assert packet.source == "XX1XX"
         assert packet.destination == "APRS"
         assert str(packet.path) == "TCPIP*,qAC,FOURTH"
 
+        assert type(packet.point) == Point
         assert packet.latitude == raw[1]
         assert packet.longitude == raw[2]
         assert packet.ambiguity == 0
@@ -258,7 +465,10 @@ def test_position_packet():
         assert packet.symbol_table == "/"
         assert packet.symbol_id == "$"
 
-        assert packet.comment == "/A=005Test packet"
+        if len(raw) == 5:
+            assert packet.timestamp == "092345z"
+
+        assert packet.comment == "/A=005000Test packet"
 
     # TODO - fix longitude and speed
     raw_packets = [
@@ -287,6 +497,22 @@ def test_position_packet():
         assert packet.symbol_id == ">"
 
         assert packet.comment == "Test packet"
+
+
+def test_invalid_position_packet():
+    # Try to parse a non-position packet
+    try:
+        packet = APRS.parse(
+            'XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005000Test packet'
+        )
+        packet.data_type_id = "X"
+        packet._parse()
+        assert False
+    except ParseError:
+        assert True
+    except Exception:
+        assert False
+
 
 def test_mice_packet():
     raw = r'VE6LY-9>U1PRSS-1,WIDE1-1,WIDE2-2,qAR,CALGRY:`*\Fl"Bk/]"?l}146.850MHz Andy S andy@nsnw.ca='
@@ -529,7 +755,33 @@ def test_invalid_message_packet():
         assert False
 
 
-def decode_phg():
+def test_parse_data():
+    phg, rng, dfs, course, speed, altitude, comment = PositionPacket._parse_data(
+        "PHG5132"
+    )
+
+    assert phg == "5132"
+
+    phg, rng, dfs, course, speed, altitude, comment = PositionPacket._parse_data(
+        "RNG0050"
+    )
+
+    assert rng == "0050"
+
+    phg, rng, dfs, course, speed, altitude, comment = PositionPacket._parse_data(
+        "DFS2360"
+    )
+
+    assert dfs == "2360"
+
+    phg, rng, dfs, course, speed, altitude, comment = PositionPacket._parse_data(
+        "/A=002000Test status"
+    )
+
+    assert altitude == 2000
+
+
+def test_decode_phg():
     (power, height, gain, directivity) = APRS.decode_phg("5132")
 
     assert power == 25
@@ -538,22 +790,22 @@ def decode_phg():
     assert directivity == 90
 
 
-def encode_phg():
+def test_encode_phg():
     phg = APRS.encode_phg(power=25, height=20, gain=3, directivity=90)
 
     assert phg == "5132"
 
 
-def decode_dfs():
+def test_decode_dfs():
     (strength, height, gain, directivity) = APRS.decode_dfs("2360")
 
     assert strength == 2
     assert height == 80
     assert gain == 6
-    assert directivity == "omni"
+    assert directivity == None
 
 
-def encode_dfs():
-    dfs = APRS.encode_dfs(strength=2, height=80, gain=6, directivity="omni")
+def test_encode_dfs():
+    dfs = APRS.encode_dfs(strength=2, height=80, gain=6, directivity=None)
 
     assert dfs == "2360"
