@@ -624,7 +624,7 @@ class PositionPacket(APRSPacket):
                         raise ParseError("Invalid DF values", self)
 
                     # Extract the bearing
-                    self.bearing = comment[1:4]
+                    self.bearing = int(comment[1:4])
                     logger.debug(f"DF bearing is {self.bearing} degrees")
 
                     # Decode the NRQ value
@@ -635,6 +635,7 @@ class PositionPacket(APRSPacket):
 
                 elif self.symbol_table in ["/", "\\"] and self.symbol_id == "_":
                     # / or \, and _ for the symbol table and symbol implies a weather report
+                    # TODO - Implementation
                     logger.debug("Symbol table and symbol indicates a weather report")
 
                 elif phg:
@@ -931,12 +932,15 @@ class MICEPacket(PositionPacket):
         # Parse the symbol table and symbol from the info field
         try:
             self.symbol_id = self.info[7]
-            logger.debug("Symbol is {}".format(self.symbol_id))
+            logger.debug("Symbol ID is {}".format(self.symbol_id))
         except IndexError:
-            raise ParseError("Missing symbol", self)
+            raise ParseError("Missing symbol ID", self)
 
-        self.symbol_table = self.info[8]
-        logger.debug("Symbol table is {}".format(self.symbol_table))
+        try:
+            self.symbol_table = self.info[8]
+            logger.debug("Symbol table is {}".format(self.symbol_table))
+        except IndexError:
+            raise ParseError("Missing symbol table", self)
 
         # Next comes either the status text or telemetry (C10 P54)
         # Telemetry is indicated by setting the first character of the status field to dec 44
@@ -1388,11 +1392,11 @@ class APRS:
         return (lat, ambiguity)
 
     @staticmethod
-    def encode_uncompressed_latitude(latitude: float, ambiguity: int=0) -> str:
+    def encode_uncompressed_latitude(latitude: Union[float, int], ambiguity: int=0) -> str:
         """
         Encode a latitude into an uncompressed latitude format.
 
-        :param float latitude: a latitude
+        :param float/int latitude: a latitude
         :param int ambiguity: an optional ambiguity level
 
         For more information see :func:`decode_uncompressed_latitude`
@@ -1400,7 +1404,10 @@ class APRS:
 
         # The latitude must be a float
         if type(latitude) is not float:
-            raise ValueError("Latitude must be a float ({} given)".format(type(latitude)))
+            if type(latitude) is int:
+                latitude = float(latitude)
+            else:
+                raise TypeError("Latitude must be an float ({} given)".format(type(latitude)))
 
         # The latitude must be between -90 and 90 inclusive
         if not -90 <= latitude <= 90:
@@ -1410,7 +1417,7 @@ class APRS:
 
         # The ambiguity must be an int
         if ambiguity and type(ambiguity) is not int:
-            raise ValueError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
+            raise TypeError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
 
         # The ambiguity must be between 0 and 4 inclusive
         if ambiguity < 0 or ambiguity > 4:
@@ -1459,7 +1466,10 @@ class APRS:
 
         # The longitude must be a float
         if type(longitude) is not float:
-            raise ValueError("Longitude must be a float ({} given)".format(type(longitude)))
+            if type(longitude) is int:
+                longitude = float(longitude)
+            else:
+                raise TypeError("Longitude must be a float ({} given)".format(type(longitude)))
 
         # The longitude must be between -180 and 180 inclusive
         if not -180 <= longitude <= 180:
@@ -1469,7 +1479,7 @@ class APRS:
 
         # The ambiguity must be an int
         if ambiguity and type(ambiguity) is not int:
-            raise ValueError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
+            raise TypeError("Ambiguity must be an int ({} given)".format(type(ambiguity)))
 
         # The ambiguity must be between 0 and 4 inclusive
         if ambiguity < 0 or ambiguity > 4:
@@ -1533,56 +1543,47 @@ class APRS:
 
         # If the ambiguity value is more than 0, replace longitude digits with
         # spaces as required.
-        if 0 < ambiguity <= 4:
+        if 0 <= ambiguity <= 4:
             longitude = longitude.replace(' ', '0')
-        elif ambiguity > 4:
+        else:
             raise ValueError("Invalid ambiguity level: {} (maximum is 4)".format(
                 ambiguity
             ))
 
-        try:
-            # Extract the number of degrees
-            degrees = int(longitude[:3])
-            if degrees > 180:
-                raise ValueError("Invalid degrees: {}".format(degrees))
+        # Extract the number of degrees
+        degrees = int(longitude[:3])
+        if degrees > 180:
+            raise ValueError("Invalid degrees: {}".format(degrees))
 
-            logger.debug("Degrees: {}".format(degrees))
+        logger.debug("Degrees: {}".format(degrees))
 
-            # Since we don't want to replace the '.', if the ambiguity is more than
-            # 2, increment it by 1.
-            if ambiguity > 2:
-                ambiguity_level = ambiguity + 1
-            else:
-                ambiguity_level = ambiguity
+        # Since we don't want to replace the '.', if the ambiguity is more than
+        # 2, increment it by 1.
+        if ambiguity > 2:
+            ambiguity_level = ambiguity + 1
+        else:
+            ambiguity_level = ambiguity
 
-            # Extract the number of minutes, and round it to 6 decimal places
-            if ambiguity == 1:
-                mins = longitude[3:-2] + "0"
-            elif ambiguity == 2:
-                mins = longitude[3:-3] + "00"
-            elif ambiguity == 3:
-                mins = longitude[3:-5] + "0.00"
-            elif ambiguity == 4:
-                mins = longitude[3:-6] + "00.00"
-            else:
-                mins = longitude[3:-1]
+        # Extract the number of minutes, and round it to 6 decimal places
+        if ambiguity == 1:
+            mins = longitude[3:-2] + "0"
+        elif ambiguity == 2:
+            mins = longitude[3:-3] + "00"
+        elif ambiguity == 3:
+            mins = longitude[3:-5] + "0.00"
+        elif ambiguity == 4:
+            mins = longitude[3:-6] + "00.00"
+        else:
+            mins = longitude[3:-1]
 
-            minutes = round(float(mins)/60, 6)
-            logger.debug("Ambiguity level: {}".format(ambiguity_level))
-            logger.debug("Minutes: {}".format(minutes))
+        minutes = round(float(mins)/60, 6)
+        logger.debug("Ambiguity level: {}".format(ambiguity_level))
+        logger.debug("Minutes: {}".format(minutes))
 
-            # Extract the east/west
-            direction = longitude[-1]
+        # Extract the east/west
+        direction = longitude[-1]
 
-            logger.debug("Direction: {}".format(direction))
-
-        except ValueError:
-            raise
-
-        except Exception as e:
-            raise ParseError("Couldn't parse longitude {}: {}".format(
-                longitude, e
-            ))
+        logger.debug("Direction: {}".format(direction))
 
         # Add the degrees and minutes to give the longitude
         lng = degrees + minutes
@@ -1839,7 +1840,9 @@ class APRS:
 
         # Validate the given values
         # Power must be a value between 0 to 9 squared
-        if power not in [v ** 2 for v in range(0, 10)]:
+        if type(power) is not int:
+            raise TypeError("Power must be of type 'int' ({} given)".format(type(power)))
+        elif power not in [v ** 2 for v in range(0, 10)]:
             raise ValueError("Power must be one of {} ({} given)".format(
                 [v ** 2 for v in range(0, 10)], power
             ))
@@ -1849,15 +1852,19 @@ class APRS:
 
         # Antenna height must be a value that is 2 raised to the power of the ASCII value higher
         # than or equal to '0' minus 48, then multiplied by 10
-        if height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
+        if type(height) is not int:
+            raise TypeError("Height must be of type 'int' ({} given)".format(type(height)))
+        elif height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
             raise ValueError("Height must be one of {} ({} given)".format(
-                [(2 ** (v-48))*10 for v in range(48, 127)]
+                [(2 ** (v-48))*10 for v in range(48, 127)], height
             ))
         else:
             h = chr(int((math.log((height/10), 2)+48)))
 
         # Antenna gain must be a number between 0 and 9 inclusive
-        if not 0 <= gain <= 9:
+        if type(gain) is not int:
+            raise TypeError("Gain must be of type 'int' ({} given)".format(type(gain)))
+        elif not 0 <= gain <= 9:
             raise ValueError("Gain must be between 0 and 9 inclusive ({} given)".format(
                 gain
             ))
@@ -1865,7 +1872,7 @@ class APRS:
             g = gain
 
         # Directivity must be a multiple of 45
-        if directivity == "omni":
+        if directivity is None:
             d = 0
         elif type(directivity) is int:
             if directivity % (360/8) != 0.0:
@@ -1875,9 +1882,9 @@ class APRS:
             else:
                 d = int(directivity / 45)
         else:
-            raise ValueError(
-                "Directivity must either be 'omni' or a multiple of 45 ({} given)".format(
-                    directivity
+            raise TypeError(
+                "Directivity must either be of type 'int' or None ({} given)".format(
+                    type(directivity)
                 ))
 
         # Return the encoded PHG value
@@ -1949,9 +1956,14 @@ class APRS:
         """
 
         # Signal strength must be a digit between 0 and 9 inclusive
-        if type(strength) is not int or not 0 <= strength <= 9:
+
+        if type(strength) is not int:
+            raise TypeError("Signal strength must be of type 'int' ({} given)".format(
+                type(strength)
+            ))
+        elif not 0 <= strength <= 9:
             raise ValueError(
-                "Signal strength must be an int between 0 and 9 inclusive ({} given)".format(
+                "Signal strength must be between 0 and 9 inclusive ({} given)".format(
                     strength
                 ))
         else:
@@ -1959,14 +1971,18 @@ class APRS:
 
         # Antenna height must be a value that is 2 raised to the power of the ASCII value higher
         # than or equal to '0' minus 48, then multiplied by 10
-        if height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
+        if type(height) is not int:
+            raise TypeError("Height must be of type 'int' ({} given)".format(type(height)))
+        elif height not in [(2 ** (v-48))*10 for v in range(48, 127)]:
             raise ValueError("Height must be one of {} ({} given)".format(
-                [(2 ** (v-48))*10 for v in range(48, 127)]
+                [(2 ** (v-48))*10 for v in range(48, 127)], height
             ))
         else:
             h = chr(int((math.log((height/10), 2)+48)))
 
         # Antenna gain must be a number between 0 and 9 inclusive
+        if type(gain) is not int:
+            raise TypeError("Gain must be of type 'int' ({} given)".format(type(gain)))
         if not 0 <= gain <= 9:
             raise ValueError("Gain must be between 0 and 9 inclusive ({} given)".format(
                 gain
@@ -1985,9 +2001,9 @@ class APRS:
             else:
                 d = int(directivity / 45)
         else:
-            raise ValueError(
-                "Directivity must either be 'omni' or a multiple of 45 ({} given)".format(
-                    directivity
+            raise TypeError(
+                "Directivity must either be of type 'int' or None ({} given)".format(
+                    type(directivity)
                 ))
 
         return f"{s}{h}{g}{d}"
@@ -2101,7 +2117,7 @@ class APRS:
 
             if len(info) < 5:
                 # TODO - handle this properly
-                logger.error("Packet is too short.")
+                raise ParseError("Packet is too short.")
 
         elif data_type_id in "`'":
             logger.debug("Packet is a Mic-E packet")
