@@ -10,10 +10,10 @@ from geopy.point import Point
 
 from typing import Union, List, Tuple, Optional
 
-from .exceptions import ParseError, UnsupportedError
+from .exceptions import ParseError, UnsupportedError, GenerateError
 from .components import Path, Station
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -1136,15 +1136,26 @@ class MessagePacket(APRSPacket):
     See also APRS 1.01 C14 P71
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, addressee: str = None, message: str = None, message_id: str = None,
+             bulletin_id: int = None, announcement_id: str = None, group_bulletin_name: str = None,
+             *args, **kwargs):
+        """
+        Create a new :class:`MessagePacket` object.
+
+        :param str addressee: the message addressee
+        :param str message: the message
+        :param str message_id: an optional message ID
+        :param int bulletin_id: the bulletin ID
+        :param str announcement_id: the announcement ID
+        :param str group_bulletin_name: the group bulletin name
+        """
         super().__init__(*args, **kwargs)
         self._addressee = None
         self._message = None
         self._message_id = None
-        self._bulletin = False
         self._bulletin_id = None
         self._announcement_id = None
-        self._group_bulletin = None
+        self._group_bulletin_name = None
 
     @property
     def addressee(self) -> str:
@@ -1154,7 +1165,21 @@ class MessagePacket(APRSPacket):
     @addressee.setter
     def addressee(self, value: str):
         """Set the addressee of the message"""
-        self._addressee = value
+        if value is None:
+            # Clear the addressee
+            self._addressee = None
+        elif type(value) is str:
+            if len(value) > 9:
+                # The maximum length of the addressee is 9 characters
+                raise ValueError(
+                    "Addressee length cannot be longer than 9 characters ({} given)".format(
+                        len(value)
+                    )
+                )
+            else:
+                self._addressee = value
+        else:
+            raise TypeError("Addressee must be of type 'str' ({} given)".format(type(value)))
 
     @property
     def message(self) -> str:
@@ -1164,7 +1189,21 @@ class MessagePacket(APRSPacket):
     @message.setter
     def message(self, value: str):
         """Set the message"""
-        self._message = value
+        if value is None:
+            # Clear the message
+            self._message = None
+        elif type(value) is str:
+            if len(value) > 67:
+                # The maximum length of a message is 67 characters (C14 P71)
+                raise ValueError(
+                    "Message length cannot be longer than 67 characters ({} given)".format(
+                        len(value)
+                    )
+                )
+            else:
+                self._message = value
+        else:
+            raise TypeError("Message must be of type 'str' ({} given)".format(type(value)))
 
     @property
     def message_id(self) -> str:
@@ -1174,15 +1213,21 @@ class MessagePacket(APRSPacket):
     @message_id.setter
     def message_id(self, value: str):
         """Set the message ID"""
-        self._message_id = value
-
-    @property
-    def bulletin(self) -> bool:
-        return self._bulletin
-
-    @bulletin.setter
-    def bulletin(self, value: bool):
-        self._bulletin = value
+        if value is None:
+            # Clear the message ID
+            self._message_id = None
+        elif type(value) is str:
+            if len(value) > 5:
+                # The maximum length of a message ID is 5 characters
+                raise ValueError(
+                    "Message ID length cannot be longer than 5 characters ({} given)".format(
+                        len(value)
+                    )
+                )
+            else:
+                self._message_id = value
+        else:
+            raise TypeError("Message ID must be of type 'str' ({} given)".format(type(value)))
 
     @property
     def bulletin_id(self) -> int:
@@ -1192,7 +1237,21 @@ class MessagePacket(APRSPacket):
     @bulletin_id.setter
     def bulletin_id(self, value: int):
         """Set the bulletin ID"""
-        self._bulletin_id = value
+        if value is None:
+            # Clear the bulletin ID
+            self._bulletin_id = None
+        elif type(value) is int:
+            if 0 <= value <= 9:
+                self._bulletin_id = value
+            else:
+                # The bulletin must be 0 to 9
+                raise ValueError(
+                    "Bulletin ID must be a value between 0 and 9 inclusive ({} given)".format(
+                        value
+                    )
+                )
+        else:
+            raise TypeError("Bulletin ID must be of type 'int' ({} given)".format(type(value)))
 
     @property
     def announcement_id(self) -> str:
@@ -1202,17 +1261,44 @@ class MessagePacket(APRSPacket):
     @announcement_id.setter
     def announcement_id(self, value: str):
         """Set the announcement ID"""
-        self._announcement_id = value
+        if value is None:
+            # Clear the announcement ID
+            self._announcement_id = None
+        elif type(value) is str:
+            if len(value) != 1:
+                # An announcement ID is a single character
+                raise ValueError(
+                    "Announcement IDs must be a single character ({} given)".format(len(value)))
+            else:
+                self._announcement_id = value
+        else:
+            raise TypeError("Announcement ID must be of type 'str' ({} given)".format(type(value)))
 
     @property
-    def group_bulletin(self) -> str:
+    def group_bulletin_name(self) -> str:
         """Get the group bulletin name"""
-        return self._group_bulletin
+        return self._group_bulletin_name
 
-    @group_bulletin.setter
-    def group_bulletin(self, value: str):
+    @group_bulletin_name.setter
+    def group_bulletin_name(self, value: str):
         """Set the group bulletin name"""
-        self._group_bulletin = value
+        if value is None:
+            # Clear the group bulletin name
+            self._group_bulletin_name = None
+        elif type(value) is str:
+            if len(value) > 5:
+                # The maximum length of a group bulletin name is 5 characters
+                raise ValueError(
+                    "Group bulletin names cannot be longer than 5 characters ({} given)".format(
+                        len(value)
+                    )
+                )
+            else:
+                self._group_bulletin_name = value
+        else:
+            raise TypeError("Group bulletin name must be of type 'str' ({} given)".format(
+                type(value))
+            )
 
     def _parse(self) -> bool:
         """
@@ -1235,7 +1321,6 @@ class MessagePacket(APRSPacket):
         # Is this a bulletin/announcement?
         if addressee[0:3] == "BLN":
             logger.debug("Message is a bulletin")
-            self.bulletin = True
 
             if re.match("[0-9]", addressee[3]):
                 # Bulletins have the format BLNn or BLNnaaaaa, where n is a digit between 0 and 9
@@ -1246,11 +1331,11 @@ class MessagePacket(APRSPacket):
                     logger.debug("Bulletin {}".format(self.bulletin_id))
                 else:
                     # Group bulletin
-                    self.group_bulletin = addressee[4:9].rstrip()
+                    self.group_bulletin_name = addressee[4:9].rstrip()
                     self.bulletin_id = int(addressee[3])
 
                     logger.debug("Group bulletin {} ({})".format(
-                        self.group_bulletin, self.bulletin_id
+                        self.group_bulletin_name, self.bulletin_id
                     ))
 
             elif re.match("[A-Z]", addressee[3]):
@@ -1283,11 +1368,35 @@ class MessagePacket(APRSPacket):
 
         return True
 
+    def _generate(self) -> str:
+        """Generate the information field for a message packet."""
+        info = ":"
+        if self.addressee:
+            info += self.addressee.ljust(9)
+        elif self.group_bulletin_name:
+            info += "BLN{}{}".format(self.bulletin_id, self.group_bulletin_name).ljust(9)
+        elif self.announcement_id:
+            info += "BLN{}".format(self.announcement_id).ljust(9)
+        elif self.bulletin_id:
+            info += "BLN{}".format(self.bulletin_id).ljust(9)
+        else:
+            raise GenerateError("No addressee, announcement or bulletin details", self)
+
+        if self.message:
+            info += ":{}".format(self.message)
+        else:
+            raise GenerateError("No message", self)
+
+        if self.message_id:
+            info += "{" + self.message_id
+
+        return info
+
     def __repr__(self):
         if self.source:
-            if self.group_bulletin:
+            if self.group_bulletin_name:
                 return "<MessagePacket: {} -> Group Bulletin {} #{}>".format(
-                    self.source, self.group_bulletin, self.bulletin_id
+                    self.source, self.group_bulletin_name, self.bulletin_id
                 )
             elif self.bulletin_id:
                 return "<MessagePacket: {} -> Bulletin #{}>".format(self.source, self.bulletin_id)

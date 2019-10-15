@@ -16,6 +16,16 @@ class ParseError(Exception):
         self.packet = packet
 
 
+class GenerateError(Exception):
+    """
+    Generating exception
+    """
+    def __init__(self, message: str, packet=None):
+        super(ParseError, self).__init__(message)
+
+        self.packet = packet
+
+
 class UnsupportedError(Exception):
     """
     Thrown when packets are of an unsupported format
