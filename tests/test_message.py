@@ -4,6 +4,12 @@ from aprspy import APRS, MessagePacket
 from aprspy.exceptions import ParseError
 
 
+def test_empty_message_packet():
+    packet = MessagePacket()
+
+    assert repr(packet) == "<MessagePacket>"
+
+
 def test_message_packet():
     raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{001'
 
@@ -232,3 +238,10 @@ def test_invalid_message_packet():
         assert True
     except:
         assert False
+
+
+def test_invalid_message_id():
+    with pytest.raises(ParseError):
+        # This message has a message ID that is too long (> 5 characters long)
+        raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{123456'
+        APRS.parse(raw)

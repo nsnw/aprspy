@@ -7,6 +7,12 @@ from aprspy.packets.position import PositionPacket
 from aprspy.exceptions import ParseError
 
 
+def test_empty_packet():
+    packet = PositionPacket()
+
+    assert str(packet) == "<PositionPacket>"
+
+
 def test_init_position_packet():
     packet = PositionPacket()
     point = Point(51, -114, 1000)

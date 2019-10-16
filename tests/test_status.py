@@ -62,6 +62,12 @@ def packet_with_hdg_and_pwr():
     return packet
 
 
+def test_empty_packet():
+    packet = StatusPacket()
+
+    assert repr(packet) == "<StatusPacket>"
+
+
 def test_type(packet):
     assert type(packet) == StatusPacket
 
