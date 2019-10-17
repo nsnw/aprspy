@@ -22,25 +22,31 @@ class PositionPacket(GenericPacket):
     This class represents packets which provide position information - including weather reports.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, latitude: float = None, longitude: float = None, ambiguity: int = None,
+                 course: int = None, speed: float = None, comment: str = None, power: int = None,
+                 height: int = None, gain: int = None, directivity: int = None,
+                 radio_range: int = None, strength: int = None, bearing: int = None,
+                 number: float = None, df_range: int = None, quality: int = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._point = Point()
-        self._ambiguity = None
-        self._course = None
-        self._speed = None
-        self._comment = None
+        self.latitude = latitude
+        self.longitude = longitude
+        self.ambiguity = ambiguity
+        self.course = course
+        self.speed = speed
+        self.comment = comment
 
         # PHG/RNG/DFS/BRG/NRQ
-        self._power = None
-        self._height = None
-        self._gain = None
-        self._directivity = None
-        self._radio_range = None
-        self._strength = None
-        self._bearing = None
-        self._number = None
-        self._df_range = None
-        self._quality = None
+        self.power = power
+        self.height = height
+        self.gain = gain
+        self.directivity = directivity
+        self.radio_range = radio_range
+        self.strength = strength
+        self.bearing = bearing
+        self.number = number
+        self.df_range = df_range
+        self.quality = quality
 
     @property
     def point(self) -> Point:
@@ -93,12 +99,12 @@ class PositionPacket(GenericPacket):
         self._course = value
 
     @property
-    def speed(self) -> int:
+    def speed(self) -> float:
         """Get the speed of the station"""
         return self._speed
 
     @speed.setter
-    def speed(self, value: int):
+    def speed(self, value: float):
         """Set the speed of the station"""
         self._speed = value
 
