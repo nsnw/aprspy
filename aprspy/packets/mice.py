@@ -48,6 +48,7 @@ class MICEPacket(PositionPacket):
         lng_offset = False
 
         # Iterate over each character of the destination address
+        # TODO - A-K not used for 4-6
         count = 0
         for i in destination[0:6]:
             count += 1
@@ -217,6 +218,7 @@ class MICEPacket(PositionPacket):
 
         # The speed is in knots, and is obtained by multiplying sp by 10, and adding the quotient of
         # dc divided by 10
+        # TODO - handle other speed encoding scheme (see C10 P50)
         speed = (sp * 10) + int(dc / 10)
 
         # The course is in degrees, and is obtained by multiplying the remainder of dc divided by 10
