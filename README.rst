@@ -12,14 +12,14 @@ The intention of the module is to provide a way to decode and encode various dif
 Currently supports:-
 
 - Decoding
-  - Standard compressed/uncompressed location packets (PositionPacket)
-  - Mic-E location packets (MICEPacket)
-  - Message packets (MessagePacket)
-  - Status report packets (StatusPacket)
+ - Standard compressed/uncompressed location packets (PositionPacket)
+ - Mic-E location packets (MICEPacket)
+ - Message packets (MessagePacket)
+ - Status report packets (StatusPacket)
 
 - Encoding
-  - Compressed/uncompressed locations
-  - PHG/DFS/RNG values
+ - Compressed/uncompressed locations
+ - PHG/DFS/RNG values
 
 Note that encoding entire packets is planned, but not yet supported.
 
