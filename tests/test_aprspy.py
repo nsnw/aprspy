@@ -11,12 +11,13 @@ def test_init_packet():
     assert repr(packet) == "<GenericPacket>"
 
     packet = GenericPacket(source="XX1XX", destination="APRS", path="TCPIP*,qAR,T2TEST",
-                        info=">This is a test status message")
+                        data_type_id=">", info="This is a test status message")
 
     assert repr(packet) == "<GenericPacket: XX1XX>"
     assert packet.source == "XX1XX"
     assert packet.destination == "APRS"
-    assert packet.info == ">This is a test status message"
+    assert packet.data_type_id == ">"
+    assert packet._info == "This is a test status message"
 
 
 def test_packet_properties():

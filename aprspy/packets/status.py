@@ -63,17 +63,16 @@ class StatusPacket(GenericPacket):
         # Therefore, if the status report matches [A-Z]{2}[0-9]{2}([A-Z]{2})? and a valid symbol
         # table and id, then it's a Maidenhead locator.
         # Valid symbol table IDs: /, \, 0-9, A-Z (C20 P91)
-        if len(self.info) >= 7:
-            mh_4 = self.info[1:7]
-            logger.debug("Considering as Maidenhead locator: {}".format(mh_4))
-        else:
-            mh_4 = None
+        mh_4 = None
+        mh_6 = None
 
-        if len(self.info) >= 9:
-            mh_6 = self.info[1:9]
+        if len(self._info) >= 6:
+            mh_4 = self._info[0:6]
+            logger.debug("Considering as Maidenhead locator: {}".format(mh_4))
+
+        if len(self._info) >= 8:
+            mh_6 = self._info[0:8]
             logger.debug("Considering as Maidenhead locator: {}".format(mh_6))
-        else:
-            mh_6 = None
 
         if mh_6 is not None and re.match("[A-Z]{2}[0-9]{2}[A-Z]{2}[/\\\0-9A-Z].", mh_6):
             # Maidenhead locator (GGnngg)
@@ -86,13 +85,13 @@ class StatusPacket(GenericPacket):
                 self.maidenhead_locator, self.symbol_table, self.symbol_id
             ))
 
-            if len(self.info) != 9:
+            if len(self._info) != 8:
                 # First character of the text must be " " (C16 P82)
-                if self.info[9] != " ":
+                if self._info[8] != " ":
                     # TODO
                     raise ParseError("Status message is invalid", self)
                 else:
-                    self.status_message = self.info[10:]
+                    self.status_message = self._info[9:]
                     logger.debug("Status message is {}".format(self.status_message))
             else:
                 logger.debug("No status message")
@@ -108,32 +107,32 @@ class StatusPacket(GenericPacket):
                 self.maidenhead_locator, self.symbol_table, self.symbol_id
             ))
 
-            if len(self.info) != 7:
+            if len(self._info) != 6:
 
                 # First character of the text must be " " (C16 P82)
-                if self.info[7] != " ":
+                if self._info[6] != " ":
                     # TODO
                     raise ParseError("Status message is invalid", self)
                 else:
-                    self.status_message = self.info[8:]
+                    self.status_message = self._info[7:]
                     logger.debug("Status message is {}".format(self.status_message))
             else:
                 logger.debug("No status message")
 
         else:
             # Check for a timestamp
-            if re.match("^[0-9]{6}z", self.info[1:]):
-                self.timestamp = APRSUtils.decode_timestamp(self.info[1:8])
+            if re.match("^[0-9]{6}z", self._info):
+                self.timestamp = APRSUtils.decode_timestamp(self._info[0:7])
                 # Sanity check the timestamp type - status reports can only use zulu
                 # or local, so if hms is used, throw an error.
                 # if timestamp_type == 'h' and data_type_id == '>':
                 #     logger.error("Timestamp type 'h' cannot be used for status reports")
                 #     raise ParseError("Timestamp type 'h' cannot be used for status reports")
-                self.status_message = self.info[8:]
+                self.status_message = self._info[7:]
                 logger.debug("Status message timestamp is {}".format(self.timestamp))
                 logger.debug("Status message is {}".format(self.status_message))
             else:
-                self.status_message = self.info[1:]
+                self.status_message = self._info
                 logger.debug("No timestamp found")
                 logger.debug("Status message is {}".format(self.status_message))
 

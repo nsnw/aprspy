@@ -5,6 +5,7 @@ import logging
 from typing import Union
 
 from ..components import Path, Station
+from ..exceptions import GenerateError
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -19,19 +20,23 @@ class GenericPacket:
     """
 
     def __init__(self, source: str = None, destination: str = None, path: str = None,
-                 info: str = None):
+                 data_type_id: str = None, info: str = None):
         # list to hold the path hops
         self._path_hops = []
         self._source = None
         self._destination = None
         self._path = None
+        self._data_type_id = None
         self._info = None
 
         # Set source, destination, path and info (if given)
         self.source = source
         self.destination = destination
         self.path = path
-        self.info = info
+        self.data_type_id = data_type_id
+
+        # TODO - info is a bit messed up
+        self._info = info
 
         self.checksum = None
 
@@ -101,16 +106,6 @@ class GenericPacket:
             raise TypeError("Path must be of type 'str' or 'Path' ({} given)".format(type(value)))
 
     @property
-    def info(self) -> str:
-        """Get the information field of the packet"""
-        return self._info
-
-    @info.setter
-    def info(self, value: str):
-        """Set the information field of the packet"""
-        self._info = value
-
-    @property
     def timestamp(self) -> str:
         """Get the timestamp of the packet"""
         return self._timestamp
@@ -149,6 +144,35 @@ class GenericPacket:
     def symbol_id(self, value: str):
         """Set the symbol ID of the packet"""
         self._symbol = value
+
+    def _generate(self):
+        output = ""
+        if self.source is not None:
+            output += f"{self.source}>"
+        else:
+            raise GenerateError("Missing source address")
+
+        if self.destination is not None:
+            output += f"{self.destination},"
+        else:
+            raise GenerateError("Missing destination address")
+
+        if self.path is not None:
+            output += f"{self.path}:"
+        else:
+            raise GenerateError("Missing path")
+
+        if self.data_type_id is not None:
+            output += f"{self.data_type_id}"
+        else:
+            raise GenerateError("Missing data type ID")
+
+        if self.info is not None:
+            output += f"{self.info}"
+        else:
+            raise GenerateError("Missing info")
+
+        return output
 
     def __repr__(self):
         if self.source:

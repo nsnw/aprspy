@@ -163,9 +163,9 @@ class MICEPacket(PositionPacket):
         logger.debug("Info input: {}".format(info))
         # The degrees, minutes and hundreths of minutes are obtained by subtracting 28 from the
         # ASCII values of the 3 characters
-        lng_deg = ord(info[1]) - 28
-        lng_min = ord(info[2]) - 28
-        lng_hmin = ord(info[3]) - 28
+        lng_deg = ord(info[0]) - 28
+        lng_min = ord(info[1]) - 28
+        lng_hmin = ord(info[2]) - 28
 
         # If the longitude offset is set, apply it to the degrees value
         if lng_offset:
@@ -210,9 +210,9 @@ class MICEPacket(PositionPacket):
 
         try:
             # For each of the 3 characters, subtract 28 from the ASCII value
-            sp = ord(info[4]) - 28
-            dc = ord(info[5]) - 28
-            se = ord(info[6]) - 28
+            sp = ord(info[3]) - 28
+            dc = ord(info[4]) - 28
+            se = ord(info[5]) - 28
         except IndexError:
             raise ParseError("Couldn't parse speed/course in Mic-E packet")
 
@@ -251,20 +251,20 @@ class MICEPacket(PositionPacket):
 
         # Decode the longitude, using the longitude offset and east/west direction from the previous
         # step
-        self.longitude = self._decode_longitude(self.info, lng_offset, east_west)
+        self.longitude = self._decode_longitude(self._info, lng_offset, east_west)
 
         # Decode the speed and course from the info field
-        (self.speed, self.course) = self._decode_speed_and_course(self.info)
+        (self.speed, self.course) = self._decode_speed_and_course(self._info)
 
         # Parse the symbol table and symbol from the info field
         try:
-            self.symbol_id = self.info[7]
+            self.symbol_id = self._info[6]
             logger.debug("Symbol ID is {}".format(self.symbol_id))
         except IndexError:
             raise ParseError("Missing symbol ID", self)
 
         try:
-            self.symbol_table = self.info[8]
+            self.symbol_table = self._info[7]
             logger.debug("Symbol table is {}".format(self.symbol_table))
         except IndexError:
             raise ParseError("Missing symbol table", self)
@@ -272,13 +272,13 @@ class MICEPacket(PositionPacket):
         # Next comes either the status text or telemetry (C10 P54)
         # Telemetry is indicated by setting the first character of the status field to dec 44
         # (a ',') or the unprintable 29.
-        if len(self.info) >= 10:
-            if ord(self.info[9]) == 44 or ord(self.info[9]) == 29:
+        if len(self._info) >= 10:
+            if ord(self._info[8]) == 44 or ord(self._info[8]) == 29:
                 logger.debug("Packet contains telemetry data")
                 # TODO
             else:
                 logger.debug("Packet contains status text")
-                status_text = self.info[10:]
+                status_text = self._info[9:]
 
                 # The status text can contain an altitude value (C10 P55)
                 # It's indicated by the first 4 characters, with the 4th being a '}'

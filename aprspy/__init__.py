@@ -13,7 +13,7 @@ from .packets.mice import MICEPacket
 from .packets.object import ObjectPacket
 from .packets.message import MessagePacket
 
-__version__ = "0.1.4"
+__version__ = "0.2.0"
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ class APRS:
 
         try:
             # Parse out the source, destination, path and information fields
-            (source, destination, path, info) = re.match(
-                r'([\w\d\-]+)>([\w\d\-]+),([\w\d\-\*\,]+):(.*)',
+            (source, destination, path, data_type_id, info) = re.match(
+                r'([\w\d\-]+)>([\w\d\-]+),([\w\d\-\*\,]+):(.)(.*)',
                 packet
             ).groups()
         except AttributeError:
@@ -65,14 +65,11 @@ class APRS:
         if not re.match(r'^[A-Z0-9]{1,6}(\-[0-9]{1,2})?$', destination):
             raise ParseError("Destination address is invalid", packet)
 
-        # Parse the information field
-        data_type_id = info[0]
-
         if data_type_id in '!/=@':
             logger.debug("Packet is a position packet")
             p = PositionPacket()
 
-            if len(info) < 5:
+            if len(info) < 4:
                 # TODO - handle this properly
                 raise ParseError("Packet is too short.")
 
@@ -115,7 +112,7 @@ class APRS:
         p.source = source
         p.destination = destination
         p.path = path
-        p.info = info
+        p._info = info
         p.checksum = checksum
         p.data_type_id = data_type_id
         p._raw = packet

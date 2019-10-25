@@ -13,6 +13,12 @@ def packet():
     return packet
 
 
+def test_empty(packet):
+    packet = MICEPacket()
+
+    assert repr(packet) == "<MICEPacket>"
+
+
 def test_type(packet):
     assert type(packet) == MICEPacket
 

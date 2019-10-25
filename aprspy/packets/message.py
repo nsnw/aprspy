@@ -41,6 +41,9 @@ class MessagePacket(GenericPacket):
         self._announcement_id = None
         self._group_bulletin_name = None
 
+        # Set the data type ID
+        self.data_type_id = ":"
+
     @property
     def addressee(self) -> str:
         """Get the addressee of the message"""
@@ -192,13 +195,13 @@ class MessagePacket(GenericPacket):
         """
 
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        if self.info[10] != ":":
+        if self._info[9] != ":":
             raise ParseError("Invalid message packet", self)
 
         # Split the message into the addressee and the actual message
-        addressee = self.info[1:10]
+        addressee = self._info[0:9]
         self.addressee = addressee.rstrip()
-        message = self.info[11:]
+        message = self._info[10:]
 
         logger.debug("Message is addressed to {}, message is {}".format(addressee, message))
 
@@ -230,7 +233,9 @@ class MessagePacket(GenericPacket):
                     logger.debug("Announcement {}".format(self.announcement_id))
                 else:
                     # Incorrectly-formatted bulletin
-                    raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)
+                    raise ParseError(
+                        "Incorrectly-formatted announcement: {}".format(addressee), self
+                    )
 
             else:
                 # Incorrectly-formatted bulletin
@@ -252,9 +257,10 @@ class MessagePacket(GenericPacket):
 
         return True
 
-    def _generate(self) -> str:
+    @property
+    def info(self) -> str:
         """Generate the information field for a message packet."""
-        info = ":"
+        info = ""
         if self.addressee:
             info += self.addressee.ljust(9)
         elif self.group_bulletin_name:

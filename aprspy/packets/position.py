@@ -430,7 +430,7 @@ class PositionPacket(GenericPacket):
             self.messaging = False
 
             # Parse timestamp
-            self.timestamp = APRSUtils.decode_timestamp(self.info[1:8])
+            self.timestamp = APRSUtils.decode_timestamp(self._info[0:8])
 
         elif self.data_type_id == '=':
             # Packet has no timestamp, station has messaging capability
@@ -442,16 +442,16 @@ class PositionPacket(GenericPacket):
             self.messaging = True
 
             # Parse timestamp
-            self.timestamp = APRSUtils.decode_timestamp(self.info[1:8])
+            self.timestamp = APRSUtils.decode_timestamp(self._info[0:8])
 
         else:
             # This isn't a position packet
             raise ParseError("Unknown position data type: {}".format(self.data_type_id))
 
         if self.timestamp is None:
-            data = self.info[1:]
+            data = self._info
         else:
-            data = self.info[8:]
+            data = self._info[7:]
 
         # Check to see if the position data is compressed or uncompressed
         if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
