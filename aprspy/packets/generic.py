@@ -20,25 +20,27 @@ class GenericPacket:
     """
 
     def __init__(self, source: str = None, destination: str = None, path: str = None,
-                 data_type_id: str = None, info: str = None):
+                 data_type_id: str = None, info: str = None, symbol_table: str = None,
+                 symbol_id: str = None):
         # list to hold the path hops
         self._path_hops = []
-        self._source = None
-        self._destination = None
-        self._path = None
-        self._data_type_id = None
-        self._info = None
+
+        self._raw = None
 
         # Set source, destination, path and info (if given)
         self.source = source
         self.destination = destination
         self.path = path
         self.data_type_id = data_type_id
+        self.symbol_table = symbol_table
+        self.symbol_id = symbol_id
 
         # TODO - info is a bit messed up
         self._info = info
 
         self.checksum = None
+        self.timestamp = None
+        self.timestamp_type = None
 
     @property
     def source(self) -> Station:
@@ -106,6 +108,16 @@ class GenericPacket:
             raise TypeError("Path must be of type 'str' or 'Path' ({} given)".format(type(value)))
 
     @property
+    def info(self) -> str:
+        """Get the info field of the packet"""
+        return self._info
+
+    @info.setter
+    def info(self, value: str):
+        """Set the info field of the packet"""
+        self._info = value
+
+    @property
     def timestamp(self) -> str:
         """Get the timestamp of the packet"""
         return self._timestamp
@@ -114,6 +126,16 @@ class GenericPacket:
     def timestamp(self, value: str):
         """Set the timestamp of the packet"""
         self._timestamp = value
+
+    @property
+    def timestamp_type(self) -> str:
+        """Get the timestamp type of the packet"""
+        return self._timestamp_type
+
+    @timestamp_type.setter
+    def timestamp_type(self, value: str):
+        """Set the timestamp type of the packet"""
+        self._timestamp_type = value
 
     @property
     def data_type_id(self) -> str:
@@ -145,7 +167,14 @@ class GenericPacket:
         """Set the symbol ID of the packet"""
         self._symbol = value
 
-    def _generate(self):
+    @property
+    def raw(self) -> str:
+        if self._raw:
+            return "{}>{}:{}:{}".format(
+                self._raw.source, self._raw.destination, self._raw.path, self._raw.information
+            )
+
+    def generate(self):
         output = ""
         if self.source is not None:
             output += f"{self.source}>"
@@ -162,13 +191,15 @@ class GenericPacket:
         else:
             raise GenerateError("Missing path")
 
+        info = self.info
+
         if self.data_type_id is not None:
             output += f"{self.data_type_id}"
         else:
             raise GenerateError("Missing data type ID")
 
-        if self.info is not None:
-            output += f"{self.info}"
+        if info is not None:
+            output += f"{info}"
         else:
             raise GenerateError("Missing info")
 

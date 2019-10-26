@@ -21,6 +21,9 @@ class APRSUtils:
     This class provides functions for parsing and decoding different kinds of APRS packets.
     Packet type-specific functions are defined under the different :class:`APRSPacket` subclasses.
     """
+    @staticmethod
+    def _get_utc():
+        return datetime.utcnow()
 
     @staticmethod
     def decode_uncompressed_latitude(latitude: str) -> Tuple[Union[int, float], int]:
@@ -314,21 +317,19 @@ class APRSUtils:
                 len(latitude)
             ))
 
-        try:
-            # As per APRS 1.01, if the compressed latitude is y1y2y3y4, the latitude
-            # can be determined with:-
-            # 90 - ((y1-33) x 913 + (y2-33) x 912 + (y3-33) x 91 + y4-33) / 380926
-            lat = 90 - (
-                (ord(latitude[0])-33) * 91**3 +
-                (ord(latitude[1])-33) * 91**2 +
-                (ord(latitude[2])-33) * 91 +
-                (ord(latitude[3])-33)
-            ) / 380926
-            lat = round(lat, 6)
-        except IndexError:
-            raise ParseError("Couldn't parse compressed latitude {}".format(
-                latitude
-            ))
+        # As per APRS 1.01, if the compressed latitude is y1y2y3y4, the latitude
+        # can be determined with:-
+        # 90 - ((y1-33) x 913 + (y2-33) x 912 + (y3-33) x 91 + y4-33) / 380926
+        lat = 90 - (
+            (ord(latitude[0])-33) * 91**3 +
+            (ord(latitude[1])-33) * 91**2 +
+            (ord(latitude[2])-33) * 91 +
+            (ord(latitude[3])-33)
+        ) / 380926
+        lat = round(lat, 6)
+
+        if lat > 90 or lat < -91:
+            raise ParseError("Invalid compressed latitude (greater than 90 or less than -90)")
 
         # Return latitude
         logger.debug("Output latitude: {}".format(lat))
@@ -348,26 +349,32 @@ class APRSUtils:
         """
         logger.debug("Input compressed longitude: {}".format(longitude))
 
-        try:
-            # If the compressed longitude is x1x2x3x4, the longitude can be determined
-            # with:-
-            # -180 + ((x1-33) x 913 + (x2-33) x 912  + (x3-33) x 91 + x4-33) / 190463
-            lng = -180 + (
-                (ord(longitude[0])-33) * 91**3 +
-                (ord(longitude[1])-33) * 91**2 +
-                (ord(longitude[2])-33) * 91 +
-                (ord(longitude[3])-33)
-            ) / 190463
-            lng = round(lng, 6)
-        except IndexError:
-            raise ParseError("Couldn't parse compressed longitude {}".format(longitude))
+        # The compressed longitude must be 4 characters
+        if len(longitude) != 4:
+            raise ValueError("Input compressed longitude must be 4 characters ({} given)".format(
+                len(longitude)
+            ))
+
+        # If the compressed longitude is x1x2x3x4, the longitude can be determined
+        # with:-
+        # -180 + ((x1-33) x 913 + (x2-33) x 912  + (x3-33) x 91 + x4-33) / 190463
+        lng = -180 + (
+            (ord(longitude[0])-33) * 91**3 +
+            (ord(longitude[1])-33) * 91**2 +
+            (ord(longitude[2])-33) * 91 +
+            (ord(longitude[3])-33)
+        ) / 190463
+        lng = round(lng, 6)
+
+        if lng > 180 or lng < -180:
+            raise ParseError("Invalid compressed longitude (greater than 180 or less than -180)")
 
         # Return longitude
         logger.debug("Output longitude: {}".format(lng))
         return lng
 
     @staticmethod
-    def decode_timestamp(raw_timestamp: str) -> int:
+    def decode_timestamp(raw_timestamp: str) -> datetime:
         """
         Decode a timestamp.
 
@@ -394,14 +401,11 @@ class APRSUtils:
             elif timestamp_type == 'h':
                 timestamp_type = 'hms'
                 logger.debug("Timestamp is hhmmss time")
-            else:
-                logger.error("Invalid timestamp type: {}".format(timestamp_type))
-                raise ParseError("Invalid timestamp type: {}".format(timestamp_type))
 
             # Get the current UTC ('zulu') time for comparison. Since timestamps in HHMMSS format
             # have no date information, we need to determine if the timestamp is for today or
             # yesterday
-            utc = datetime.utcnow()
+            utc = APRSUtils._get_utc()
 
             if timestamp_type == 'hms':
                 # HHMMSS format
@@ -459,17 +463,50 @@ class APRSUtils:
                         year = ts.year - 1
                         month = 12
                         ts = datetime(year, month, day, hour, minute, 0)
-                    else:
-                        raise ParseError("Error parsing ddhhmm timestamp: {}".format(timestamp))
 
                 # Convert to seconds
-                timestamp = int(ts.timestamp())
                 logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))
 
-            return timestamp
+            return ts, timestamp_type
 
         else:
-            raise ParseError("No timestamp found in packet")
+            raise ParseError("No valid timestamp found")
+
+    @staticmethod
+    def encode_timestamp(timestamp: datetime, timestamp_type: str = "zulu") -> str:
+        """
+        Encode a timestamp.
+
+        :param datetime timestamp: a timestamp
+        :param str timestamp_type: the timestamp type (`zulu`, `hms` or `local`)
+        """
+        if type(timestamp) is not datetime:
+            raise TypeError("Timestamp must of type 'datetime' ({} given)".format(type(timestamp)))
+
+        if timestamp_type == "zulu":
+            return "{}{}{}z".format(
+                str(timestamp.day).zfill(2),
+                str(timestamp.hour).zfill(2),
+                str(timestamp.minute).zfill(2)
+            )
+        elif timestamp_type == "local":
+            return "{}{}{}/".format(
+                str(timestamp.day).zfill(2),
+                str(timestamp.hour).zfill(2),
+                str(timestamp.minute).zfill(2)
+            )
+        elif timestamp_type == "hms":
+            return "{}{}{}h".format(
+                str(timestamp.hour).zfill(2),
+                str(timestamp.minute).zfill(2),
+                str(timestamp.second).zfill(2)
+            )
+        else:
+            raise ValueError(
+                "Timestamp type must be one of 'zulu', 'hms' or 'local' ({} given)".format(
+                    timestamp_type
+                )
+            )
 
     @staticmethod
     def decode_phg(phg: str) -> Tuple[int, int, int, Optional[int]]:
