@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="aprspy",
-    version="0.2.0",
+    version="0.2.1",
     author="Andy Smith",
     author_email="andy@nsnw.ca",
     description="An APRS parser for Python",

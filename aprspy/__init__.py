@@ -4,6 +4,7 @@ import re
 import logging
 
 from hashlib import md5
+from collections import namedtuple
 
 from .exceptions import ParseError, UnsupportedError
 from .packets.generic import GenericPacket
@@ -13,10 +14,13 @@ from .packets.mice import MICEPacket
 from .packets.object import ObjectPacket
 from .packets.message import MessagePacket
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# Named tuple to hold original raw values
+Raw = namedtuple('Raw', ['source', 'destination', 'path', 'information'])
 
 
 class APRS:
@@ -26,6 +30,7 @@ class APRS:
     This class provides functions for parsing and decoding different kinds of APRS packets.
     Packet type-specific functions are defined under the different :class:`APRSPacket` subclasses.
     """
+
     @staticmethod
     def parse(packet: str = None) -> GenericPacket:
         """
@@ -115,7 +120,9 @@ class APRS:
         p._info = info
         p.checksum = checksum
         p.data_type_id = data_type_id
-        p._raw = packet
+
+        # Add the raw values to the packet object
+        p._raw = Raw(source=source, destination=destination, path=path, information=info)
 
         # Call the packet-specific parser
         p._parse()
