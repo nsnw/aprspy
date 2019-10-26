@@ -1,6 +1,10 @@
 import pytest
+import mock
+
+from datetime import datetime
 
 from aprspy.utils import APRSUtils
+from aprspy.exceptions import ParseError
 
 
 def test_decode_uncompressed_latitude_without_ambiguity():
@@ -265,10 +269,16 @@ def test_decode_compressed_latitude():
     assert lat == 49.5
 
 
-def test_decode_compressed_latitude_invalid_latitude():
+def test_decode_compressed_latitude_invalid_length():
     with pytest.raises(ValueError):
         # Length must be 4
         APRSUtils.decode_compressed_latitude("5L!!!")
+
+
+def test_decode_compressed_latitude_invalid_value():
+    with pytest.raises(ParseError):
+        # Results in an invalid latitude
+        APRSUtils.decode_compressed_latitude(" L!!")
 
 
 def test_decode_compressed_longitude():
@@ -281,4 +291,74 @@ def test_decode_compressed_longitude():
 def test_decode_compressed_longitude_invalid_longitude():
     with pytest.raises(ValueError):
         # Length must be 4
-        APRSUtils.decode_compressed_latitude("<*e77")
+        APRSUtils.decode_compressed_longitude("<*e77")
+
+
+def test_decode_compressed_longitude_invalid_value():
+    with pytest.raises(ParseError):
+        # Results in an invalid longitude
+        APRSUtils.decode_compressed_longitude(" *e7")
+
+
+def test_decode_timestamp_zulu_time():
+    timestamp, timestamp_type = APRSUtils.decode_timestamp("092345z")
+
+    assert type(timestamp) == datetime
+    assert timestamp_type == "zulu"
+    assert timestamp.day == 9
+    assert timestamp.hour == 23
+    assert timestamp.minute == 45
+
+
+def test_decode_timestamp_local_time():
+    timestamp, timestamp_type = APRSUtils.decode_timestamp("092345/")
+
+    assert type(timestamp) == datetime
+    assert timestamp_type == "local"
+    assert timestamp.day == 9
+    assert timestamp.hour == 23
+    assert timestamp.minute == 45
+
+
+def test_decode_timestamp_hms_time():
+    timestamp, timestamp_type = APRSUtils.decode_timestamp("234517h")
+
+    assert type(timestamp) == datetime
+    assert timestamp_type == "hms"
+    assert timestamp.hour == 23
+    assert timestamp.minute == 45
+    assert timestamp.second == 17
+
+
+def test_decode_timestamp_invalid_time_format():
+    with pytest.raises(ParseError):
+        APRSUtils.decode_timestamp("234517m")
+
+
+def test_decode_timestamp_zulu_invalid_time_value():
+    with pytest.raises(ParseError):
+        APRSUtils.decode_timestamp("322345z")
+
+
+def test_decode_timestamp_hms_invalid_time_value():
+    with pytest.raises(ParseError):
+        APRSUtils.decode_timestamp("254517h")
+
+
+def test_decode_timestamp_in_previous_month():
+    # Fake the date, ensure we get returned the previous month
+    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 10, 10)):
+        timestamp, timestamp_type = APRSUtils.decode_timestamp("302345z")
+
+        assert timestamp.day == 30
+        assert timestamp.month == 9
+
+
+def test_decode_timestamp_in_previous_year():
+    # Fake the date, ensure we get returned the previous month
+    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 1, 10)):
+        timestamp, timestamp_type = APRSUtils.decode_timestamp("302345z")
+
+        assert timestamp.day == 30
+        assert timestamp.month == 12
+        assert timestamp.year == 2018

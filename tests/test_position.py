@@ -1,6 +1,8 @@
 import pytest
 
 from geopy import Point
+from datetime import datetime
+
 from aprspy import APRS
 from aprspy.packets.position import PositionPacket
 from aprspy.exceptions import ParseError
@@ -89,24 +91,24 @@ def test_parse_compressed_position_without_altitude():
     assert alt is None
 
 
-def test_parse_positions():
-    raw_packets = [
+@pytest.mark.parametrize(
+    "input_raw, latitude, longitude, data_type_id, timestamp", [
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30W$221/000/A=005000Test packet',
-         50.508333, -100.338333, "="),
+         50.508333, -100.338333, "=", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50N/10020.30E$221/000/A=005000Test packet',
-         50.508333, 100.338333, "="),
+         50.508333, 100.338333, "=", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30W$221/000/A=005000Test packet',
-         -50.508333, -100.338333, "="),
+         -50.508333, -100.338333, "=", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=5030.50S/10020.30E$221/000/A=005000Test packet',
-         -50.508333, 100.338333, "="),
+         -50.508333, 100.338333, "=", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50N/10020.30W$221/000/A=005000Test packet',
-         50.508333, -100.338333, "!", ),
+         50.508333, -100.338333, "!", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50N/10020.30E$221/000/A=005000Test packet',
-         50.508333, 100.338333, "!"),
+         50.508333, 100.338333, "!", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50S/10020.30W$221/000/A=005000Test packet',
-         -50.508333, -100.338333, "!"),
+         -50.508333, -100.338333, "!", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:!5030.50S/10020.30E$221/000/A=005000Test packet',
-         -50.508333, 100.338333, "!"),
+         -50.508333, 100.338333, "!", None),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50N/10020.30W$221/000/A=005000Test packet',
          50.508333, -100.338333, "/", "092345z"),
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:/092345z5030.50N/10020.30E$221/000/A=005000Test packet',
@@ -124,63 +126,67 @@ def test_parse_positions():
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:@092345/5030.50S/10020.30E$221/000/A=005000Test packet',
          -50.508333, 100.338333, "@", "092345/"),
     ]
+)
+def test_parse_uncompressed_positions(input_raw, latitude, longitude, data_type_id, timestamp):
+    packet = APRS.parse(input_raw)
 
-    for raw in raw_packets:
-        packet = APRS.parse(raw[0])
+    assert type(packet) == PositionPacket
+    assert repr(packet) == f"<PositionPacket: {packet.source}>"
+    assert packet.data_type_id == data_type_id
 
-        assert type(packet) == PositionPacket
-        assert repr(packet) == f"<PositionPacket: {packet.source}>"
-        assert packet.data_type_id == raw[3]
+    assert packet.source == "XX1XX"
+    assert packet.destination == "APRS"
+    assert str(packet.path) == "TCPIP*,qAC,FOURTH"
 
-        assert packet.source == "XX1XX"
-        assert packet.destination == "APRS"
-        assert str(packet.path) == "TCPIP*,qAC,FOURTH"
+    assert type(packet.point) == Point
+    assert packet.latitude == latitude
+    assert packet.longitude == longitude
+    assert packet.ambiguity == 0
+    assert packet.altitude == 5000
 
-        assert type(packet.point) == Point
-        assert packet.latitude == raw[1]
-        assert packet.longitude == raw[2]
-        assert packet.ambiguity == 0
+    assert packet.course == 221
+    assert packet.speed == 0
 
-        assert packet.course == 221
-        assert packet.speed == 0
+    assert packet.symbol_table == "/"
+    assert packet.symbol_id == "$"
 
-        assert packet.symbol_table == "/"
-        assert packet.symbol_id == "$"
+    assert packet.compressed is False
 
-        if len(raw) == 5:
-            # TODO - Fix timestamps
-            # assert packet.timestamp == raw[4]
-            assert packet.timestamp is not None
+    if timestamp:
+        assert packet.timestamp.day == 9
+        assert packet.timestamp.hour == 23
+        assert packet.timestamp.minute == 45
 
-        assert packet.comment == "/A=005000Test packet"
+    assert packet.comment == "Test packet"
 
-    # TODO - fix longitude and speed
-    raw_packets = [
+
+@pytest.mark.parametrize(
+    "input_raw, latitude, longitude", [
         ('XX1XX>APRS,TCPIP*,qAC,FOURTH:=/5L!!<*e7>7P[Test packet', 49.5, -72.750004),
     ]
+)
+def test_parse_compressed_positions(input_raw, latitude, longitude):
+    packet = APRS.parse(input_raw)
 
-    for raw in raw_packets:
-        packet = APRS.parse(raw[0])
+    assert type(packet) == PositionPacket
+    assert repr(packet) == f"<PositionPacket: {packet.source}>"
+    assert packet.data_type_id == "="
 
-        assert type(packet) == PositionPacket
-        assert repr(packet) == f"<PositionPacket: {packet.source}>"
-        assert packet.data_type_id == "="
+    assert packet.source == "XX1XX"
+    assert packet.destination == "APRS"
+    assert str(packet.path) == "TCPIP*,qAC,FOURTH"
 
-        assert packet.source == "XX1XX"
-        assert packet.destination == "APRS"
-        assert str(packet.path) == "TCPIP*,qAC,FOURTH"
+    assert packet.latitude == latitude
+    assert packet.longitude == longitude
+    assert packet.ambiguity == 0
 
-        assert packet.latitude == raw[1]
-        assert packet.longitude == raw[2]
-        assert packet.ambiguity is None
+    assert packet.course == 88
+    assert packet.speed == 36.2
 
-        assert packet.course == 88
-        assert packet.speed == 36.2
+    assert packet.symbol_table == "/"
+    assert packet.symbol_id == ">"
 
-        assert packet.symbol_table == "/"
-        assert packet.symbol_id == ">"
-
-        assert packet.comment == "Test packet"
+    assert packet.comment == "Test packet"
 
 
 def test_position_with_df():
@@ -285,3 +291,72 @@ def test_parse_data_with_altitude():
     )
 
     assert altitude == 2000
+
+
+@pytest.mark.parametrize(
+    "latitude, longitude, timestamp, timestamp_type, messaging, expected_output", [
+        (
+            51.5, -100, None, None, False,
+            "XX1XX>APRS,TCPIP:!5130.00N/10000.00Wk"
+        ),
+        (
+            51.5, 100, None, None, False,
+            "XX1XX>APRS,TCPIP:!5130.00N/10000.00Ek"
+        ),
+        (
+            -51.5, -100, None, None, False,
+            "XX1XX>APRS,TCPIP:!5130.00S/10000.00Wk"
+        ),
+        (
+            51.5, -100, None, None, True,
+            "XX1XX>APRS,TCPIP:=5130.00N/10000.00Wk"
+        ),
+        (
+            51.5, -100, datetime(2019, 10, 26, 10, 00, 30), "zulu", False,
+            "XX1XX>APRS,TCPIP:/261000z5130.00N/10000.00Wk"
+        ),
+        (
+            51.5, -100, datetime(2019, 10, 26, 10, 00, 30), "hms", False,
+            "XX1XX>APRS,TCPIP:/100030h5130.00N/10000.00Wk"
+        ),
+        (
+            51.5, -100, datetime(2019, 10, 26, 10, 00, 30), "local", False,
+            "XX1XX>APRS,TCPIP:/261000/5130.00N/10000.00Wk"
+        ),
+    ]
+)
+def test_generate(latitude, longitude, timestamp, timestamp_type, messaging, expected_output):
+    p = PositionPacket()
+
+    p.source = "XX1XX"
+    p.destination = "APRS"
+    p.path = "TCPIP"
+
+    p.symbol_table = "/"
+    p.symbol_id = "k"
+
+    p.latitude = latitude
+    p.longitude = longitude
+
+    p.timestamp = timestamp
+    p.timestamp_type = timestamp_type
+
+    p.messaging = messaging
+
+    output = p.generate()
+
+    assert output == expected_output
+
+
+def test_invalid_messaging_type():
+    p = PositionPacket()
+
+    with pytest.raises(TypeError):
+        p.messaging = None
+
+
+def test_invalid_compressed_type():
+    p = PositionPacket()
+
+    with pytest.raises(TypeError):
+        p.compressed = None
