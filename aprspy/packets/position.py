@@ -7,7 +7,7 @@ from geopy.point import Point
 
 from typing import Tuple, Optional
 
-from ..exceptions import ParseError
+from ..exceptions import ParseError, GenerateError
 from ..utils import APRSUtils
 from .generic import GenericPacket
 
@@ -22,12 +22,15 @@ class PositionPacket(GenericPacket):
     This class represents packets which provide position information - including weather reports.
     """
 
-    def __init__(self, latitude: float = None, longitude: float = None, ambiguity: int = None,
+    def __init__(self, latitude: float = 0.0, longitude: float = 0.0, ambiguity: int = 0,
                  course: int = None, speed: float = None, comment: str = None, power: int = None,
                  height: int = None, gain: int = None, directivity: int = None,
                  radio_range: int = None, strength: int = None, bearing: int = None,
-                 number: float = None, df_range: int = None, quality: int = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+                 number: float = None, df_range: int = None, quality: int = None,
+                 compressed: bool = False, messaging: bool = False, data_type_id: str = "!",
+                 *args, **kwargs):
+
+        super().__init__(*args, **kwargs, data_type_id=data_type_id)
         self._point = Point()
         self.latitude = latitude
         self.longitude = longitude
@@ -35,6 +38,7 @@ class PositionPacket(GenericPacket):
         self.course = course
         self.speed = speed
         self.comment = comment
+        self.messaging = messaging
 
         # PHG/RNG/DFS/BRG/NRQ
         self.power = power
@@ -47,6 +51,9 @@ class PositionPacket(GenericPacket):
         self.number = number
         self.df_range = df_range
         self.quality = quality
+
+        # Compressed
+        self.compressed = compressed
 
     @property
     def point(self) -> Point:
@@ -230,6 +237,32 @@ class PositionPacket(GenericPacket):
         # TODO - Ensure that this is valid
         self._quality = value
 
+    @property
+    def messaging(self) -> bool:
+        """Get whether this station is message-capable or not"""
+        return self._messaging
+
+    @messaging.setter
+    def messaging(self, value: bool):
+        """Set whether this station is using message-capable or not"""
+        if type(value) is not bool:
+            raise TypeError("Value must be of type 'bool' ('{}' given)".format(type(value)))
+
+        self._messaging = value
+
+    @property
+    def compressed(self) -> bool:
+        """Get whether this packet is using compressed positions or not"""
+        return self._compressed
+
+    @compressed.setter
+    def compressed(self, value: bool):
+        """Set whether this packet is using compressed positions or not"""
+        if type(value) is not bool:
+            raise TypeError("Value must be of type 'bool' ('{}' given)".format(type(value)))
+
+        self._compressed = value
+
     @staticmethod
     def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
         """
@@ -346,6 +379,39 @@ class PositionPacket(GenericPacket):
         return (latitude, longitude, altitude, course, speed, radio_range)
 
     @staticmethod
+    def _generate_uncompressed_position(latitude: float, longitude: float, symbol_table: str,
+                                        symbol_id: str, ambiguity: int = 0) -> str:
+        """
+        Generate uncompressed position data for a packet.
+
+        :param float latitude: the position's latitude
+        :param float longitude: the position's longitude
+        :param int ambiguity: the level of ambiguity for the position
+        :param str symbol_table: the symbol table reference
+        :param str symbol_id: the symbol ID
+
+        Given the latitude, longitude, symbol table, symbol ID and an optional ambiguity value, this
+        will return an information field containing these values in an uncompressed format.
+        """
+        # Encode the latitude
+        lat = APRSUtils.encode_uncompressed_latitude(latitude, ambiguity)
+
+        # Encode the longitude
+        lng = APRSUtils.encode_uncompressed_longitude(longitude, ambiguity)
+
+        logger.debug("Latitude: {} ({}) Longitude: {}".format(
+            lat, ambiguity, lng
+        ))
+
+        # Parse the symbol table
+        logger.debug("Symbol table: {}".format(symbol_table))
+        logger.debug("Symbol ID: {}".format(symbol_id))
+
+        info = f"{lat}{symbol_table}{lng}{symbol_id}"
+
+        return info
+
+    @staticmethod
     def _parse_data(data: str) -> Tuple[str, str, str, int, int, int, str]:
         """
         Parse additional information from the information field.
@@ -390,6 +456,8 @@ class PositionPacket(GenericPacket):
             logger.debug("Course is {}, speed is {}".format(course, speed))
             data = data[7:]
 
+        # TODO - parse BRG/NRQ
+
         # Check for comment
         if len(data) > 0:
 
@@ -401,11 +469,58 @@ class PositionPacket(GenericPacket):
                 altitude = int(has_altitude.groups()[0])
                 logger.debug("Altitude is {} ft".format(altitude))
 
+                # Strip out the altitude from the comment
+                data = re.sub(r'/A=[0-9]{6}', "", data)
+
             # Set the comment as the remainder of the information field
             comment = data
             logger.debug("Comment is {}".format(comment))
 
         return (phg, rng, dfs, course, speed, altitude, comment)
+
+    @staticmethod
+    def _generate_data(phg: str = None, rng: str = None, dfs: str = None, course: int = None,
+                       speed: int = None, altitude: int = None, comment: str = None) -> str:
+        """
+        Generate additional information for the information field.
+
+        :param str phg: a PHG value
+        :param str rng: an RNG value
+        :param str dfs: a DFS value
+        :param int course: course, in degrees
+        :param int speed: speed, in knots
+        :param int altitude: altitude, in feet
+        :param str comment: a comment
+
+        Position packets can have additional information in them, such as station power, antenna
+        height, antenna gain, etc. These are described in APRS 1.01 C7. This will generate an
+        information field based on these values.
+
+        Note that PHG, RNG, DFS and course/speed are mutually exclusive. Altitude is specified as
+        part of the comment and so can coexist with any of the other values.
+        """
+
+        data = ""
+        if phg:
+            data += phg
+        elif rng:
+            data += rng
+        elif dfs:
+            data += dfs
+        elif course and speed:
+            data += "{}/{}".format(
+                str(course).zfill(3), str(speed).zfill(3)
+            )
+
+        if altitude:
+            data += "/A={}".format(
+                str(altitude).zfill(6)
+            )
+
+        if comment:
+            data += comment
+
+        return data
 
     def _parse(self) -> bool:
         """
@@ -430,7 +545,7 @@ class PositionPacket(GenericPacket):
             self.messaging = False
 
             # Parse timestamp
-            self.timestamp = APRSUtils.decode_timestamp(self._info[0:8])
+            (self.timestamp, self.timestamp_type) = APRSUtils.decode_timestamp(self._info[0:8])
 
         elif self.data_type_id == '=':
             # Packet has no timestamp, station has messaging capability
@@ -442,7 +557,7 @@ class PositionPacket(GenericPacket):
             self.messaging = True
 
             # Parse timestamp
-            self.timestamp = APRSUtils.decode_timestamp(self._info[0:8])
+            (self.timestamp, self.timestamp_type) = APRSUtils.decode_timestamp(self._info[0:8])
 
         else:
             # This isn't a position packet
@@ -458,6 +573,9 @@ class PositionPacket(GenericPacket):
             # Parse the uncompressed position values from the information field
             (self.latitude, self.longitude, self.ambiguity, self.symbol_table, self.symbol_id
              ) = self._parse_uncompressed_position(data)
+
+            # Ensure compressed is set to False
+            self.compressed = False
 
             if len(data) > 19:
                 # This packet has additional data in the information field, so attempt to parse it
@@ -527,6 +645,9 @@ class PositionPacket(GenericPacket):
             (self.latitude, self.longitude, self.altitude, self.course, self.speed,
              self.radio_range) = self._parse_compressed_position(compressed_position)
 
+            # Ensure compressed is set to True
+            self.compressed = True
+
             # Parse the symbol table and symbol ID
             self.symbol_table = data[0]
             self.symbol_id = data[9]
@@ -536,6 +657,81 @@ class PositionPacket(GenericPacket):
 
         # If we get this far, then we've parsed the packet
         return True
+
+    @property
+    def info(self) -> str:
+        """Generate the information field for a position packet."""
+        info = ""
+
+        # Ensure we have a latitude and a longitude
+        if self.latitude is None:
+            raise GenerateError("Missing latitude")
+        elif self.longitude is None:
+            raise GenerateError("Missing longitude")
+
+        # Ensure we have a symbol table and symbol ID
+        if self.symbol_table is None:
+            raise GenerateError("Missing symbol table")
+        elif self.symbol_id is None:
+            raise GenerateError("Missing symbol ID")
+
+        # Set data type ID
+        if self.timestamp is None:
+            if self.messaging is False:
+                self.data_type_id = "!"
+            else:
+                self.data_type_id = "="
+        else:
+            if self.messaging is False:
+                self.data_type_id = "/"
+            else:
+                self.data_type_id = "@"
+
+            # Set the timestamp
+            info += APRSUtils.encode_timestamp(self.timestamp, self.timestamp_type)
+
+        if self.compressed:
+            # Compressed positions are currently unsupported
+            # TODO: implement compressed position generation
+            raise GenerateError("Compressed positions are currently unsupported")
+        else:
+            # Add the position in an uncompressed format
+            # TODO: handle BRG/NRQ
+            info += self._generate_uncompressed_position(
+                self.latitude, self.longitude, self.symbol_table, self.symbol_id, self.ambiguity
+            )
+
+            # Handle PHG
+            if self.power is not None and self.height is not None and self.gain is not None \
+                    and self.directivity is not None:
+                phg = APRSUtils.encode_phg(self.power, self.height, self.gain, self.directivity)
+                info += self._generate_data(phg=phg, altitude=self.altitude, comment=self.comment)
+
+            # Handle DFS
+            elif self.strength is not None and self.height is not None and self.gain is not None \
+                    and self.directivity is not None:
+                dfs = APRSUtils.encode_dfs(self.strength, self.height, self.gain, self.directivity)
+                info += self._generate_data(dfs=dfs, altitude=self.altitude, comment=self.comment)
+
+            # Handle course/speed
+            elif self.course is not None and self.speed is not None:
+                info += "{}/{}".format(
+                    str(self.course).zfill(3),
+                    str(self.speed).zfill(3)
+                )
+                info += self._generate_data(altitude=self.altitude, comment=self.comment)
+
+            # Handle RNG
+            elif self.radio_range is not None:
+                info += "DFS{}".format(
+                    str(self.radio_range).zfill(4)
+                )
+                info += self._generate_data(altitude=self.altitude, comment=self.comment)
+
+            else:
+                info += self._generate_data(altitude=self.altitude, comment=self.comment)
+
+        return info
 
     def __repr__(self):
         if self.source:
