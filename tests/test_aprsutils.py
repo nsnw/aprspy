@@ -7,6 +7,7 @@ from aprspy.utils import APRSUtils
 from aprspy.exceptions import ParseError
 
 
+# Uncompressed latitudes
 def test_decode_uncompressed_latitude_without_ambiguity():
     # Test uncompressed latitude without ambiguity
     lat, ambiguity = APRSUtils.decode_uncompressed_latitude("4903.55N")
@@ -140,6 +141,7 @@ def test_encode_uncompressed_latitude_with_invalid_ambiguity():
         APRSUtils.encode_uncompressed_latitude(51, 5)
 
 
+# Uncompressed longitudes
 def test_decode_uncompressed_longitude_without_ambiguity():
     # Test uncompressed longitude without ambiguity
     lng = APRSUtils.decode_uncompressed_longitude("07211.75W")
@@ -262,6 +264,7 @@ def test_encode_uncompressed_longitude_invalid_ambiguity():
         APRSUtils.encode_uncompressed_longitude(114, 5)
 
 
+# Compressed latitude
 def test_decode_compressed_latitude():
     # Test compressed latitude
     lat = APRSUtils.decode_compressed_latitude("5L!!")
@@ -281,6 +284,37 @@ def test_decode_compressed_latitude_invalid_value():
         APRSUtils.decode_compressed_latitude(" L!!")
 
 
+def test_encode_compressed_latitude():
+    # Test latitude
+    latitude = APRSUtils.encode_compressed_latitude(49.3)
+    assert latitude == "5U33"
+
+
+def test_encode_compressed_latitude_with_int():
+    # ints are allowed too
+    latitude = APRSUtils.encode_compressed_latitude(51)
+    assert latitude == "4b!!"
+
+
+def test_encode_compressed_latitude_with_southern_latitude():
+    # Ensure that southern latitudes work
+    latitude = APRSUtils.encode_compressed_latitude(-51)
+    assert latitude == "h:!!"
+
+
+def test_encode_compressed_latitude_with_incorrect_latitude_type():
+    with pytest.raises(TypeError):
+        # Must be a float or int
+        APRSUtils.encode_compressed_latitude("51")
+
+
+def test_encode_compressed_latitude_with_invalid_latitude():
+    with pytest.raises(ValueError):
+        # Must be be between -90 and 90
+        APRSUtils.encode_compressed_latitude(91)
+
+
+# Compressed longitude
 def test_decode_compressed_longitude():
     # Test compressed longitude
     lng = APRSUtils.decode_compressed_longitude("<*e7")
@@ -300,6 +334,37 @@ def test_decode_compressed_longitude_invalid_value():
         APRSUtils.decode_compressed_longitude(" *e7")
 
 
+def test_encode_compressed_longitude():
+    # Test longitude
+    longitude = APRSUtils.encode_compressed_longitude(-72.75)
+    assert longitude == "<*e7"
+
+
+def test_encode_compressed_longitude_with_int():
+    # ints are allowed too
+    longitude = APRSUtils.encode_compressed_longitude(-72)
+    assert longitude == "<<!!"
+
+
+def test_encode_compressed_longitude_with_eastern_longitude():
+    # Ensure that eastern longitudes work
+    longitude = APRSUtils.encode_compressed_longitude(72)
+    assert longitude == "``!!"
+
+
+def test_encode_compressed_longitude_with_incorrect_longitude_type():
+    with pytest.raises(TypeError):
+        # Must be a float or int
+        APRSUtils.encode_compressed_longitude("-72")
+
+
+def test_encode_compressed_longitude_with_invalid_longitude():
+    with pytest.raises(ValueError):
+        # Must be be between -180 and 180
+        APRSUtils.encode_compressed_longitude(181)
+
+
+# Timestamps
 def test_decode_timestamp_zulu_time():
     timestamp, timestamp_type = APRSUtils.decode_timestamp("092345z")
 

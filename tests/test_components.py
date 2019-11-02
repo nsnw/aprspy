@@ -43,7 +43,7 @@ def test_invalid_station_callsign():
         assert False
 
     try:
-        Station(callsign="XX1XXXX")
+        Station(callsign="T2TOOOLONG")
         assert False
     except ValueError:
         assert True

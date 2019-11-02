@@ -4,7 +4,8 @@ from geopy import Point
 from datetime import datetime
 
 from aprspy import APRS
-from aprspy.packets.position import PositionPacket
+from aprspy.packets.position import PositionPacket, CompressionFix, CompressionSource, \
+    CompressionOrigin
 from aprspy.exceptions import ParseError
 
 
@@ -60,7 +61,8 @@ def test_parse_invalid_uncompressed_position():
 
 
 def test_parse_compressed_position_with_altitude():
-    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+    (lat, lng, alt, course, speed, radio_range, fix, source,
+     origin) = PositionPacket._parse_compressed_position(
         "/5L!!<*e7OS]S"
     )
 
@@ -68,10 +70,15 @@ def test_parse_compressed_position_with_altitude():
     assert lng == -72.750004
     assert alt == 10004.52
 
+    assert fix == CompressionFix.OLD
+    assert source == CompressionSource.OTHER
+    assert origin == CompressionOrigin.COMPRESSED
+
 
 def test_parse_compressed_position_with_radio_range():
 
-    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+    (lat, lng, alt, course, speed, radio_range, fix, source,
+     origin) = PositionPacket._parse_compressed_position(
         "/5L!!<*e7>{?!"
     )
 
@@ -79,16 +86,25 @@ def test_parse_compressed_position_with_radio_range():
     assert lng == -72.750004
     assert radio_range == 20.13
 
+    assert fix == CompressionFix.CURRENT
+    assert source == CompressionSource.GLL
+    assert origin == CompressionOrigin.TNC_BTEXT
+
 
 def test_parse_compressed_position_without_altitude():
 
-    lat, lng, alt, course, speed, radio_range = PositionPacket._parse_compressed_position(
+    (lat, lng, alt, course, speed, radio_range, fix, source,
+     origin) = PositionPacket._parse_compressed_position(
         "/5L!!<*e7> sT"
     )
 
     assert lat == 49.5
     assert lng == -72.750004
     assert alt is None
+
+    assert fix is None
+    assert source is None
+    assert origin is None
 
 
 @pytest.mark.parametrize(
@@ -293,6 +309,20 @@ def test_parse_data_with_altitude():
     assert altitude == 2000
 
 
+def test_invalid_messaging_type():
+    p = PositionPacket()
+
+    with pytest.raises(TypeError):
+        p.messaging = None
+
+
+def test_invalid_compressed_type():
+    p = PositionPacket()
+
+    with pytest.raises(TypeError):
+        p.compressed = None
+
+
 @pytest.mark.parametrize(
     "latitude, longitude, timestamp, timestamp_type, messaging, expected_output", [
         (
@@ -348,15 +378,51 @@ def test_generate(latitude, longitude, timestamp, timestamp_type, messaging, exp
     assert output == expected_output
 
 
-def test_invalid_messaging_type():
+@pytest.fixture
+def generated_packet() -> PositionPacket:
     p = PositionPacket()
 
-    with pytest.raises(TypeError):
-        p.messaging = None
+    p.source = "XX1XX"
+    p.destination = "APRS"
+    p.path = "TCPIP"
+
+    p.symbol_table = "/"
+    p.symbol_id = "k"
+
+    p.latitude = 51.5
+    p.longitude = -100
+
+    p.comment = "Test comment"
+
+    return p
 
 
-def test_invalid_compressed_type():
-    p = PositionPacket()
+def test_generate_with_phg(generated_packet):
+    generated_packet.power = 25
+    generated_packet.height = 20
+    generated_packet.gain = 3
+    generated_packet.directivity = 90
 
-    with pytest.raises(TypeError):
-        p.compressed = None
+    output = generated_packet.generate()
+
+    assert output == "XX1XX>APRS,TCPIP:!5130.00N/10000.00WkPHG5132Test comment"
+
+
+def test_generate_with_dfs(generated_packet):
+    generated_packet.strength = 2
+    generated_packet.height = 20
+    generated_packet.gain = 3
+    generated_packet.directivity = 90
+
+    output = generated_packet.generate()
+
+    assert output == "XX1XX>APRS,TCPIP:!5130.00N/10000.00WkDFS2132Test comment"
+
+
+def test_generate_with_course_and_speed(generated_packet):
+    generated_packet.course = 80
+    generated_packet.speed = 50
+
+    output = generated_packet.generate()
+
+    assert output == "XX1XX>APRS,TCPIP:!5130.00N/10000.00Wk080/050Test comment"

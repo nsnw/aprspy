@@ -7,21 +7,20 @@ aprspy - An APRS packet parser for Python
 Introduction
 ------------
 
-The intention of the module is to provide a way to decode and encode various different types of APRS packets.
+**aprspy** is an APRS packet parser and generator for Python.
 
 Currently supports:-
 
 - Decoding
- - Standard compressed/uncompressed location packets (PositionPacket)
- - Mic-E location packets (MICEPacket)
- - Message packets (MessagePacket)
- - Status report packets (StatusPacket)
+ - Standard compressed/uncompressed location packets
+ - Mic-E location packets
+ - Message packets (including bulletins and announcements)
+ - Status report packets
 
 - Encoding
- - Compressed/uncompressed locations
- - PHG/DFS/RNG values
-
-Note that encoding entire packets is planned, but not yet supported.
+ - Uncompressed location packets
+ - Message packets
+ - 
 
 Usage
 -----

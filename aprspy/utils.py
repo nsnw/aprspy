@@ -338,7 +338,7 @@ class APRSUtils:
     @staticmethod
     def decode_compressed_longitude(longitude: str) -> float:
         """
-        Convert a compressed longitutde string latitude value.
+        Convert a compressed longitude string to a latitude value.
 
         :param str longitude: a longitude in compressed format
 
@@ -368,6 +368,82 @@ class APRSUtils:
 
         if lng > 180 or lng < -180:
             raise ParseError("Invalid compressed longitude (greater than 180 or less than -180)")
+
+        # Return longitude
+        logger.debug("Output longitude: {}".format(lng))
+        return lng
+
+    @staticmethod
+    def encode_compressed_latitude(latitude: Union[float, int]) -> str:
+        """
+        Convert a latitude to a compressed latitude value.
+
+        :param float/int latitude: a latitude
+
+        Compressed latitudes have the format YYYY, where all values are base-91
+        printable ASCII characters.
+
+        See also APRS 1.01 C9 P38.
+        """
+        logger.debug("Input latitude: {}".format(latitude))
+
+        # Ensure float or int, and between -90 and 90
+        if type(latitude) is not float and type(latitude) is not int:
+            raise TypeError("Latitude must be a 'float' or 'int' ({} given)".format(type(latitude)))
+
+        if latitude < -90 or latitude > 90:
+            raise ValueError("Latitude must be between -90 and 90 ({} given)".format(latitude))
+
+        total = 380926 * (90 - latitude)
+        (a, remainder) = divmod(total, 91 ** 3)
+        (b, remainder) = divmod(remainder, 91 ** 2)
+        (c, d) = divmod(remainder, 91 ** 1)
+
+        lat = "{}{}{}{}".format(
+            chr(int(a)+33),
+            chr(int(b)+33),
+            chr(int(c)+33),
+            chr(int(d)+33)
+        )
+
+        # Return latitude
+        logger.debug("Output latitude: {}".format(lat))
+        return lat
+
+    @staticmethod
+    def encode_compressed_longitude(longitude: Union[float, int]) -> str:
+        """
+        Convert a longitude to a compressed latitude value.
+
+        :param float/int longitude: a longitude
+
+        Compressed longitude have the format XXXX, where all values are base-91
+        printable ASCII characters
+
+        See also APRS 1.01 C9 P38
+        """
+        logger.debug("Input longitude: {}".format(longitude))
+
+        # Ensure float or int, and between -180 and 180
+        if type(longitude) is not float and type(longitude) is not int:
+            raise TypeError("Longitude must be a 'float' or 'int' ({} given)".format(
+                type(longitude)
+            ))
+
+        if longitude < -180 or longitude > 180:
+            raise ValueError("Longitude must be between -180 and 180 ({} given)".format(longitude))
+
+        total = 190463 * (180 + longitude)
+        (a, remainder) = divmod(total, 91 ** 3)
+        (b, remainder) = divmod(remainder, 91 ** 2)
+        (c, d) = divmod(remainder, 91 ** 1)
+
+        lng = "{}{}{}{}".format(
+            chr(int(a)+33),
+            chr(int(b)+33),
+            chr(int(c)+33),
+            chr(int(d)+33)
+        )
 
         # Return longitude
         logger.debug("Output longitude: {}".format(lng))

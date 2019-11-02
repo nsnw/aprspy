@@ -4,10 +4,15 @@ import logging
 import re
 
 from typing import List, Optional, Union
+from enum import Enum
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
+class QConstruct(Enum):
+    qAC = "qAC"
+    qAX = "qAX"
 
 class Station:
     """
@@ -42,6 +47,7 @@ class Station:
     @callsign.setter
     def callsign(self, value: str):
         """Set the callsign of the station (with or without an SSID)"""
+        logger.debug(value)
         # Ensure we're being given a str
         if type(value) is not str:
             raise TypeError("Callsign must be of type 'str' ({} given)".format(type(value)))
@@ -50,7 +56,7 @@ class Station:
             # We have been given a callsign and an SSID
             (self._callsign, self.ssid) = value.split("-")
 
-        elif re.match(r'^[A-Za-z0-9]{1,6}$', value):
+        elif re.match(r'^[A-Za-z0-9]{1,9}$', value):
             # We have only been given a callsign
             self._callsign = value
 

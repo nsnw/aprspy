@@ -175,6 +175,9 @@ class GenericPacket:
             )
 
     def generate(self):
+        """
+        Generate an APRS packet based on the current object's properties.
+        """
         output = ""
         if self.source is not None:
             output += f"{self.source}>"

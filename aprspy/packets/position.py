@@ -2,10 +2,12 @@
 
 import re
 import logging
+import math
 
+from enum import Enum
 from geopy.point import Point
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 from ..exceptions import ParseError, GenerateError
 from ..utils import APRSUtils
@@ -13,6 +15,64 @@ from .generic import GenericPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+class CompressionFix(Enum):
+    """
+    Enum to represent GPS fix types.
+
+    See APRS 1.01 C9 P39.
+
+    * `OLD` - old (last) GPS fix
+    * `CURRENT` - current GPS fix
+    """
+    OLD = 0b00000000
+    CURRENT = 0b00100000
+
+
+class CompressionSource(Enum):
+    """
+    Enum to represent NMEA sources.
+
+    See APRS 1.01 C9 P39.
+
+    * `OTHER` - other
+    * `GLL` - GPS GLL
+    * `GGA` - GPS GGA
+    * `RMC` - GPS RMC
+
+    See https://www.gpsinformation.org/dale/nmea.htm for an explanation of the various GPS
+    sentence types.
+    """
+    OTHER = 0b00000000
+    GLL = 0b00001000
+    GGA = 0b00010000
+    RMC = 0b00011000
+
+
+class CompressionOrigin(Enum):
+    """
+    Enum to represent the compression origin.
+
+    See APRS 1.01 C9 P39.
+
+    * `COMPRESSED` - Compressed
+    * `TNC_BTEXT` - TNC BText
+    * `SOFTWARE` - Software applications
+    * `TBD` - TBD
+    * `KPC3` - KPC3 TNC
+    * `PICO` - Pico
+    * `OTHER` - Other trackers
+    * `DIGIPEATER` - Digipeater conversion
+    """
+    COMPRESSED = 0b00000000
+    TNC_BTEXT = 0b00000001
+    SOFTWARE = 0b00000010
+    TBD = 0b00000011
+    KPC3 = 0b00000100
+    PICO = 0b00000101
+    OTHER = 0b00000110
+    DIGIPEATER = 0b00000111
 
 
 class PositionPacket(GenericPacket):
@@ -23,11 +83,14 @@ class PositionPacket(GenericPacket):
     """
 
     def __init__(self, latitude: float = 0.0, longitude: float = 0.0, ambiguity: int = 0,
-                 course: int = None, speed: float = None, comment: str = None, power: int = None,
-                 height: int = None, gain: int = None, directivity: int = None,
+                 course: int = None, speed: float = None, altitude: int = None, comment: str = None,
+                 power: int = None, height: int = None, gain: int = None, directivity: int = None,
                  radio_range: int = None, strength: int = None, bearing: int = None,
                  number: float = None, df_range: int = None, quality: int = None,
                  compressed: bool = False, messaging: bool = False, data_type_id: str = "!",
+                 compression_fix: CompressionFix = None,
+                 compression_source: CompressionSource = None,
+                 compression_origin: CompressionOrigin = None,
                  *args, **kwargs):
 
         super().__init__(*args, **kwargs, data_type_id=data_type_id)
@@ -37,6 +100,7 @@ class PositionPacket(GenericPacket):
         self.ambiguity = ambiguity
         self.course = course
         self.speed = speed
+        self.altitude = altitude
         self.comment = comment
         self.messaging = messaging
 
@@ -52,8 +116,11 @@ class PositionPacket(GenericPacket):
         self.df_range = df_range
         self.quality = quality
 
-        # Compressed
+        # Compression
         self.compressed = compressed
+        self.compression_fix = compression_fix
+        self.compression_source = compression_source
+        self.compression_origin = compression_origin
 
     @property
     def point(self) -> Point:
@@ -263,6 +330,55 @@ class PositionPacket(GenericPacket):
 
         self._compressed = value
 
+    @property
+    def compression_fix(self) -> CompressionFix:
+        """Get the compression fix type."""
+        return self._compression_fix
+
+    @compression_fix.setter
+    def compression_fix(self, value: Union[CompressionFix, None]):
+        """Set the compression fix type."""
+        if value is None or type(value) is CompressionFix:
+            self._compression_fix = value
+        else:
+            raise TypeError("Compression fix must be of type 'CompressionFix' ('{}' given)".format(
+                type(value)
+            ))
+
+    @property
+    def compression_source(self) -> CompressionSource:
+        """Get the compression source type."""
+        return self._compression_source
+
+    @compression_source.setter
+    def compression_source(self, value: Union[CompressionSource, None]):
+        """Set the compression source type."""
+        if value is None or type(value) is CompressionSource:
+            self._compression_source = value
+        else:
+            raise TypeError(
+                "Compression source must be of type 'CompressionSource' ('{}' given)".format(
+                    type(value)
+                )
+            )
+
+    @property
+    def compression_origin(self) -> CompressionOrigin:
+        """Get the compression origin type."""
+        return self._compression_origin
+
+    @compression_origin.setter
+    def compression_origin(self, value: Union[CompressionOrigin, None]):
+        """Set the compression origin type."""
+        if value is None or type(value) is CompressionOrigin:
+            self._compression_origin = value
+        else:
+            raise TypeError(
+                "Compression origin must be of type 'CompressionOrigin' ('{}' given)".format(
+                    type(value)
+                )
+            )
+
     @staticmethod
     def _parse_uncompressed_position(data: str) -> Tuple[float, float, int, str, str]:
         """
@@ -298,8 +414,48 @@ class PositionPacket(GenericPacket):
         return (lat, lng, ambiguity, symbol_table, symbol_id)
 
     @staticmethod
-    def _parse_compressed_position(data: str) -> Tuple[
-            float, float, Optional[float], Optional[float], Optional[float], Optional[float]]:
+    def _parse_compressed_byte(compression_byte: str) -> Tuple[CompressionFix, CompressionSource,
+                                                               CompressionOrigin]:
+        """
+        Parse the compression byte.
+
+        :param str compression_byte: the compression byte
+
+        This will return a tuple of Enums denoting the compression fix, source and origin.
+
+        For more information, see APRS 1.01 C9 P39.
+        """
+
+        t = ord(compression_byte) - 33
+
+        # Determine the fix type
+        for fix in iter(CompressionFix):
+            if t | fix.value:
+                break
+        else:
+            raise ParseError("Could not determine the compression fix type ({})".format(bin(t)))
+
+        # Determine the source type
+        for source in iter(CompressionSource):
+            if t | source.value:
+                break
+        else:
+            raise ParseError("Could not determine the compression source type ({})".format(bin(t)))
+
+        # Determine the origin type
+        for origin in iter(CompressionOrigin):
+            if t | origin.value:
+                break
+        else:
+            raise ParseError("Could not determine the compression origintype ({})".format(bin(t)))
+
+        return [fix, source, origin]
+
+    @classmethod
+    def _parse_compressed_position(cls, data: str) -> Tuple[
+        float, float, Optional[float], Optional[float], Optional[float], Optional[float],
+        Optional[CompressionFix], Optional[CompressionSource], Optional[CompressionOrigin]
+    ]:
         """
         Parse compressed position data from a packet.
 
@@ -336,6 +492,11 @@ class PositionPacket(GenericPacket):
         # Check for altitude, course/speed or radio range
         if data[10] == " ":
             # If the 11th character is blank, then don't do any further parsing
+
+            fix = None
+            source = None
+            origin = None
+
             logger.debug("No course, speed or range data")
 
         elif comp_type[3] == "0" and comp_type[4] == "1":
@@ -346,6 +507,8 @@ class PositionPacket(GenericPacket):
             c = ord(data[10]) - 33
             s = ord(data[11]) - 33
             altitude = round((1.002 ** (c * 91 + s)), 2)
+
+            fix, source, origin = cls._parse_compressed_byte(data[12])
 
             logger.debug("Altitude: {}".format(altitude))
 
@@ -361,6 +524,8 @@ class PositionPacket(GenericPacket):
             s = ord(data[11]) - 33
             speed = round((1.08 ** s) - 1, 1)
 
+            fix, source, origin = cls._parse_compressed_byte(data[12])
+
             logger.debug("Course: {} Speed: {}".format(course, speed))
 
         elif data[10] == "{":
@@ -369,14 +534,15 @@ class PositionPacket(GenericPacket):
             s = ord(data[11]) - 33
             radio_range = round(2 * (1.08 ** s), 2)
 
-            logger.debug("Radio range: {}".format(radio_range))
+            fix, source, origin = cls._parse_compressed_byte(data[12])
 
+            logger.debug("Radio range: {}".format(radio_range))
         else:
             raise ValueError("Invalid character when looking for course/speed or range: {}".format(
                 data[10]
             ))
 
-        return (latitude, longitude, altitude, course, speed, radio_range)
+        return (latitude, longitude, altitude, course, speed, radio_range, fix, source, origin)
 
     @staticmethod
     def _generate_uncompressed_position(latitude: float, longitude: float, symbol_table: str,
@@ -410,6 +576,113 @@ class PositionPacket(GenericPacket):
         info = f"{lat}{symbol_table}{lng}{symbol_id}"
 
         return info
+
+    @staticmethod
+    def _generate_compressed_byte(fix: CompressionFix, source: CompressionSource,
+                                  origin: CompressionOrigin) -> str:
+        """
+        Generate the compression byte based on the fix, source and origin values.
+
+        :param CompressionFix fix: the fix status
+        :param CompressionSource source: the NMEA source
+        :param CompressionOrigin origin: the compression origin
+
+        For more information, see APRS 1.01 C9 P39.
+        """
+
+        # Generate the byte by ORing the values
+        t = fix.value | source.value | origin.value
+
+        # Add 33, convert to an ASCII character
+        compression_byte = chr(t + 33)
+
+        return compression_byte
+
+    @classmethod
+    def _generate_compressed_position(cls, latitude: float, longitude: float, symbol_table: str,
+                                      symbol_id: str, altitude: int = None, course: int = None,
+                                      speed: int = None, radio_range: int = None,
+                                      fix: CompressionFix = CompressionFix.OLD,
+                                      source: CompressionSource = CompressionSource.OTHER,
+                                      origin: CompressionOrigin = CompressionOrigin.SOFTWARE
+                                      ) -> str:
+        """
+        Generate compressed position data for a packet.
+
+        :param float latitude: the position's latitude
+        :param float longitude: the position's longitude
+        :param str symbol_table: the symbol table reference
+        :param str symbol_id: the symbol ID
+        :param int altitude: the altitude, in feet
+        :param int course: the course, in degrees
+        :param int speed: the speed, in knots
+        :param int radio_range: the radio range, in miles
+        :param str fix: the GPS fix type
+        :param str source: the NMEA source
+        :param str origin: the compression origin
+
+        Given the latitude, longitude, symbol table, symbol ID, this will return an information
+        field containing these values in an uncompressed format.
+
+        Additional (mutually exclusive) optional values can also be added:-
+        * course and speed
+        * altitude
+        * radio range
+
+        The `fix`, `source` and `origin` values are used to generate the 'Compression byte' (see
+        APRS 1.01 C9 P39). See :class:`CompressionFix`, :class:`CompressionSource` and
+        :class:`CompressionOrigin`.
+
+        If altitude is specified, then `source` will be overridden.
+        """
+
+        lat = APRSUtils.encode_compressed_latitude(latitude)
+        lng = APRSUtils.encode_compressed_longitude(longitude)
+
+        if course is not None and speed is not None:
+            c = chr((course // 4) + 33)
+            s = chr(round(math.log((speed + 1), 1.08)) + 33)
+            t = cls._generate_compressed_byte(fix, source, origin)
+
+        elif altitude is not None and altitude >= 1.0:
+            # First get the exponent
+            exp = round(math.log(altitude, 1.002))
+
+            # The exponent is converted back into two numbers that fit the following equation:-
+            # a * 91 + b = exp
+            # Values must translate (after having 33 added to them) to a printable ASCII character.
+            # This means we're limited to between 0 and 93 (33 and 126).
+            a = None
+            for b in range(0, 94):
+                if (exp - b) % 91 == 0 and (exp - b) // 91 < 94:
+                    a = (exp - b) // 91
+                    break
+            else:
+                raise GenerateError("Could not encode altitude ({}ft)".format(altitude))
+
+            c = chr(a + 33)
+            s = chr(b + 33)
+
+            source = CompressionSource.GGA
+            t = cls._generate_compressed_byte(fix, source, origin)
+
+        elif radio_range is not None:
+            # The first character is always {
+            c = "{"
+
+            # The range is encoded as the exponent of the following:-
+            # 2 * (1.08 ** exp)
+            exp = round(math.log((radio_range/2), 1.08))
+            s = chr(exp + 33)
+
+            t = cls._generate_compressed_byte(fix, source, origin)
+
+        else:
+            c = " "
+            s = "s"
+            t = "T"
+
+        return f"{symbol_table}{lat}{lng}{symbol_id}{c}{s}{t}"
 
     @staticmethod
     def _parse_data(data: str) -> Tuple[str, str, str, int, int, int, str]:
@@ -643,7 +916,8 @@ class PositionPacket(GenericPacket):
             # Parse the compressed position values from the information field
             compressed_position = data[0:13]
             (self.latitude, self.longitude, self.altitude, self.course, self.speed,
-             self.radio_range) = self._parse_compressed_position(compressed_position)
+             self.radio_range, self.compression_fix, self.compression_source,
+             self.compression_origin) = self._parse_compressed_position(compressed_position)
 
             # Ensure compressed is set to True
             self.compressed = True
@@ -651,6 +925,8 @@ class PositionPacket(GenericPacket):
             # Parse the symbol table and symbol ID
             self.symbol_table = data[0]
             self.symbol_id = data[9]
+
+            # TODO - parse altitude information
 
             self.comment = data[13:]
             logger.debug("Comment is {}".format(self.comment))
@@ -691,9 +967,15 @@ class PositionPacket(GenericPacket):
             info += APRSUtils.encode_timestamp(self.timestamp, self.timestamp_type)
 
         if self.compressed:
-            # Compressed positions are currently unsupported
-            # TODO: implement compressed position generation
-            raise GenerateError("Compressed positions are currently unsupported")
+            # Add the position in a compressed format
+            info += self._generate_compressed_position(
+                self.latitude, self.longitude, self.symbol_table, self.symbol_id, self.altitude,
+                self.course, self.speed, self.radio_range, self.compression_fix,
+                self.compression_source, self.compression_origin)
+
+            # PHG, etc is not supported for compressed formats (see APRS 1.01 C9 P36)
+            info += self.comment
+
         else:
             # Add the position in an uncompressed format
             # TODO: handle BRG/NRQ
@@ -705,13 +987,17 @@ class PositionPacket(GenericPacket):
             if self.power is not None and self.height is not None and self.gain is not None \
                     and self.directivity is not None:
                 phg = APRSUtils.encode_phg(self.power, self.height, self.gain, self.directivity)
-                info += self._generate_data(phg=phg, altitude=self.altitude, comment=self.comment)
+                info += "PHG{}".format(
+                    self._generate_data(phg=phg, altitude=self.altitude, comment=self.comment)
+                )
 
             # Handle DFS
             elif self.strength is not None and self.height is not None and self.gain is not None \
                     and self.directivity is not None:
                 dfs = APRSUtils.encode_dfs(self.strength, self.height, self.gain, self.directivity)
-                info += self._generate_data(dfs=dfs, altitude=self.altitude, comment=self.comment)
+                info += "DFS{}".format(
+                    self._generate_data(dfs=dfs, altitude=self.altitude, comment=self.comment)
+                )
 
             # Handle course/speed
             elif self.course is not None and self.speed is not None:
