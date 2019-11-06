@@ -6,18 +6,34 @@ import re
 from typing import List, Optional, Union
 from enum import Enum
 
+from .exceptions import ParseError
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
 class QConstruct(Enum):
+    """
+    Enum for specifying q constructs.
+    """
     qAC = "qAC"
     qAX = "qAX"
+    qAU = "qAU"
+    qAo = "qAo"
+    qAO = "qAO"
+    qAS = "qAS"
+    qAr = "qAr"
+    qAR = "qAR"
+    qAZ = "qAZ"
+    qAI = "qAI"
+
 
 class Station:
     """
     Class for describing a station, with an optional SSID
     """
+    _callsign = None
+
     def __init__(self, callsign: str, ssid: Union[str, int] = None):
         """
         Create a new station.
@@ -52,11 +68,14 @@ class Station:
         if type(value) is not str:
             raise TypeError("Callsign must be of type 'str' ({} given)".format(type(value)))
 
-        if re.match(r'^[A-Za-z0-9]{1,6}-[A-Za-z0-9]{1,2}$', value):
+        callsign_ssid_regex = '^[A-Za-z0-9]+-[A-Za-z0-9]{1,2}$'
+        callsign_only_regex = '^[A-Za-z0-9]+$'
+
+        if re.match(callsign_ssid_regex, value):
             # We have been given a callsign and an SSID
             (self._callsign, self.ssid) = value.split("-")
 
-        elif re.match(r'^[A-Za-z0-9]{1,9}$', value):
+        elif re.match(callsign_only_regex, value):
             # We have only been given a callsign
             self._callsign = value
 
@@ -79,13 +98,24 @@ class Station:
         elif type(value) is str:
             if re.match(r'^[A-Za-z0-9]{1,2}$', value):
                 # Valid SSID
-                self._ssid = value
+                if re.match(r'^[0-9]{1,2}', value):
+                    # Can we convert it to an int?
+                    if int(value) == 0:
+                        self._ssid = None
+                    elif int(value) <= 15:
+                        self._ssid = int(value)
+                    else:
+                        self._ssid = value
+                else:
+                    self._ssid = value
             else:
                 raise ValueError("SSID is invalid")
 
         elif type(value) is int:
-            if 0 <= value <= 15:
-                self._ssid = str(value)
+            if value == 0:
+                self._ssid = None
+            elif 1 <= value <= 15:
+                self._ssid = value
             else:
                 raise ValueError("SSID is invalid")
 
@@ -94,6 +124,20 @@ class Station:
                 type(value)
             ))
 
+    @property
+    def is_valid_ax25(self) -> bool:
+        """Get whether this station is a valid AX.25 address"""
+        if len(self.callsign) > 6:
+            # Callsign is longer than 6 characters
+            return False
+
+        if type(self.ssid) is int:
+            return True
+        elif self.ssid is None:
+            return True
+        else:
+            return False
+
     def __str__(self) -> str:
         if self.ssid:
             return f"{self.callsign}-{self.ssid}"
@@ -101,24 +145,27 @@ class Station:
             return self.callsign
 
     def __repr__(self) -> str:
-        return "<Station: {}>".format(str(self))
+        return "<Station: {}>".format(
+            str(self)
+        )
 
 
 class PathHop:
     """
     Class for describing a single path hop.
     """
-    def __init__(self, station: Union[str, Station], used: bool = False):
+    def __init__(self, hop: Union[str, Station, QConstruct], used: bool = False):
         """
         Create a new path hop.
 
-        :param str station: a station, with or without a trailing ``*`` to denote a used hop
+        :param str/Station/QConstruct hop: a path hop as either a ``str`` (with or without a
+        trailing ``*`` to denote a used hop), a :class:`Station` or a :class:`Station`.
         :param bool used: whether the hop has been used up or not
 
         This will create a new :class:`PathHop` object, which describes a single hop in a path.
         A number of these can be grouped together in a single :class:`Path` object.
 
-        A used hop can be either be specified in a single argument (with ``station``) by appending
+        A used hop can be either be specified in a single argument (with ``hop``) by appending
         a ``*`` to the end of the station, or by setting ``used`` to ``True``. Both ways are handled
         the same internally.
         """
@@ -126,30 +173,47 @@ class PathHop:
         # 'used' must be set first, since it can be updated if we're only passed a station with a
         # '*'
         self.used = used
-        self.station = station
+        self.hop = hop
 
     @property
-    def station(self) -> Union[str, Station]:
-        """Get the station"""
-        return self._station
+    def hop(self) -> Union[Station, QConstruct]:
+        """Get the hop"""
+        return self._hop
 
-    @station.setter
-    def station(self, value: Union[str, Station]):
-        """Set the station"""
+    @hop.setter
+    def hop(self, value: Union[str, Station, QConstruct]):
+        """Set the hop"""
+        # Check for a Station object
         if type(value) is Station:
-            self._station = value
+            self._hop = value
 
-        elif type(value) is str and len(value) <= 9:
-            if value[-1] == "*":
+        # Check for QConstruct object
+        elif type(value) is QConstruct:
+            self._hop = value
+
+        # Parse the hop as a string
+        elif type(value) is str:
+            # Check for a q construct
+            if value[0:2] == "qA":
+                try:
+                    self._hop = QConstruct(value=value)
+                except KeyError:
+                    raise ParseError("Invalid q construct: {}".format(value))
+
+            # Check for a trailing *
+            elif value[-1] == "*":
                 self.used = True
-                self._station = Station(callsign=value[:-1])
+                self._hop = Station(callsign=value[:-1])
+
             else:
                 self.used = False
-                self._station = Station(callsign=value)
+                self._hop = Station(callsign=value)
         else:
-            raise TypeError("Station must be of type 'str' or 'Station' ({} given)".format(
-                type(value)
-            ))
+            raise TypeError(
+                "Station must be of type 'str', 'Hop' or 'QConstruct' ({} given)".format(
+                    type(value)
+                )
+            )
 
     @property
     def used(self) -> bool:
@@ -168,9 +232,12 @@ class PathHop:
 
     def __str__(self) -> str:
         if self.used:
-            return "{}*".format(str(self.station))
+            return "{}*".format(str(self.hop))
         else:
-            return str(self.station)
+            if type(self.hop) is QConstruct:
+                return str(self.hop.value)
+            else:
+                return str(self.hop)
 
     def __repr__(self) -> str:
         return "<PathHop: {}>".format(str(self))
@@ -199,7 +266,7 @@ class Path:
     def path(self, value: str):
         if type(value) is str:
             # Split the path
-            self._path_hops = [PathHop(station=path_hop) for path_hop in value.split(",")]
+            self._path_hops = [PathHop(hop=path_hop) for path_hop in value.split(",")]
         else:
             raise TypeError("Path must be of type 'str' ({} given)".format(type(value)))
 
