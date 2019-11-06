@@ -7,8 +7,6 @@ from ..exceptions import ParseError
 from ..utils import APRSUtils
 from .generic import GenericPacket
 
-__version__ = "0.1.4"
-
 # Set up logging
 logger = logging.getLogger(__name__)
 

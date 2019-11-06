@@ -14,7 +14,7 @@ from .packets.mice import MICEPacket
 from .packets.object import ObjectPacket
 from .packets.message import MessagePacket
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 # Set up logging
 logger = logging.getLogger(__name__)
