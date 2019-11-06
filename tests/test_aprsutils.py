@@ -427,3 +427,35 @@ def test_decode_timestamp_in_previous_year():
         assert timestamp.day == 30
         assert timestamp.month == 12
         assert timestamp.year == 2018
+
+
+# Passcode tests
+
+def test_generate_passcode():
+    passcode = APRSUtils.generate_passcode(callsign="XX1XX")
+
+    assert passcode == "17122"
+
+
+def test_generate_passcode_with_ssid():
+    passcode = APRSUtils.generate_passcode(callsign="XX1XX-1")
+
+    assert passcode == "17122"
+
+
+def test_validate_passcode():
+    valid = APRSUtils.validate_passcode(callsign="XX1XX", passcode="17122")
+
+    assert valid is True
+
+
+def test_validate_passcode_with_ssid():
+    valid = APRSUtils.validate_passcode(callsign="XX1XX-1", passcode="17122")
+
+    assert valid is True
+
+
+def test_validate_invalid_passcode():
+    valid = APRSUtils.validate_passcode(callsign="XX1XX", passcode="17123")
+
+    assert valid is False

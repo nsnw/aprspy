@@ -17,7 +17,7 @@ def test_init_packet():
     assert packet.source == "XX1XX"
     assert packet.destination == "APRS"
     assert packet.data_type_id == ">"
-    assert packet._info == "This is a test status message"
+    assert packet.info == "This is a test status message"
 
 
 def test_packet_properties():

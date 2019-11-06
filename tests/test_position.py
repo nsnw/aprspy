@@ -378,6 +378,76 @@ def test_generate(latitude, longitude, timestamp, timestamp_type, messaging, exp
     assert output == expected_output
 
 
+@pytest.mark.parametrize(
+    "latitude, longitude, timestamp, timestamp_type, messaging, expected_output", [
+        (
+            49.5, -72.75, None, None, False,
+            "XX1XX>APRS,TCPIP:!/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, 72.75, None, None, False,
+            "XX1XX>APRS,TCPIP:!/5L!!`q7ek sTTest comment"
+        ),
+        (
+            -49.5, -72.75, None, None, False,
+            "XX1XX>APRS,TCPIP:!/gP!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, None, None, True,
+            "XX1XX>APRS,TCPIP:=/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "zulu", False,
+            "XX1XX>APRS,TCPIP:/261000z/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "hms", False,
+            "XX1XX>APRS,TCPIP:/100030h/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "local", False,
+            "XX1XX>APRS,TCPIP:/261000//5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "zulu", True,
+            "XX1XX>APRS,TCPIP:@261000z/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "hms", True,
+            "XX1XX>APRS,TCPIP:@100030h/5L!!<*e7k sTTest comment"
+        ),
+        (
+            49.5, -72.75, datetime(2019, 10, 26, 10, 00, 30), "local", True,
+            "XX1XX>APRS,TCPIP:@261000//5L!!<*e7k sTTest comment"
+        ),
+    ]
+)
+def test_generate_compressed(latitude, longitude, timestamp, timestamp_type, messaging,
+                             expected_output):
+    p = PositionPacket()
+
+    p.source = "XX1XX"
+    p.destination = "APRS"
+    p.path = "TCPIP"
+
+    p.symbol_table = "/"
+    p.symbol_id = "k"
+
+    p.latitude = latitude
+    p.longitude = longitude
+
+    p.timestamp = timestamp
+    p.timestamp_type = timestamp_type
+
+    p.messaging = messaging
+    p.comment = "Test comment"
+    p.compressed = True
+
+    output = p.generate()
+
+    assert output == expected_output
+
+
 @pytest.fixture
 def generated_packet() -> PositionPacket:
     p = PositionPacket()
@@ -426,3 +496,11 @@ def test_generate_with_course_and_speed(generated_packet):
     output = generated_packet.generate()
 
     assert output == "XX1XX>APRS,TCPIP:!5130.00N/10000.00Wk080/050Test comment"
+
+
+def test_generate_with_radio_range(generated_packet):
+    generated_packet.radio_range = 50
+
+    output = generated_packet.generate()
+
+    assert output == "XX1XX>APRS,TCPIP:!5130.00N/10000.00WkRNG0050Test comment"

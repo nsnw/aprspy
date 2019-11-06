@@ -974,7 +974,8 @@ class PositionPacket(GenericPacket):
                 self.compression_source, self.compression_origin)
 
             # PHG, etc is not supported for compressed formats (see APRS 1.01 C9 P36)
-            info += self.comment
+            if self.comment:
+                info += self.comment
 
         else:
             # Add the position in an uncompressed format
@@ -1009,7 +1010,7 @@ class PositionPacket(GenericPacket):
 
             # Handle RNG
             elif self.radio_range is not None:
-                info += "DFS{}".format(
+                info += "RNG{}".format(
                     str(self.radio_range).zfill(4)
                 )
                 info += self._generate_data(altitude=self.altitude, comment=self.comment)

@@ -557,7 +557,9 @@ class APRSUtils:
         :param str timestamp_type: the timestamp type (`zulu`, `hms` or `local`)
         """
         if type(timestamp) is not datetime:
-            raise TypeError("Timestamp must of type 'datetime' ({} given)".format(type(timestamp)))
+            raise TypeError("Timestamp must be of type 'datetime' ({} given)".format(
+                type(timestamp)
+            ))
 
         if timestamp_type == "zulu":
             return "{}{}{}z".format(
@@ -880,3 +882,57 @@ class APRSUtils:
                 logger.debug("Bearing accuracy is useless")
 
         return (number, rng, quality)
+
+    @staticmethod
+    def generate_passcode(callsign: str) -> str:
+        """
+        Generate an APRS-IS passcode for a given callsign.
+
+        :param str callsign: a callsign, with or without an SSID
+
+        This will generate an APRS-IS passcode for a callsign, after stripping the SSID (if given).
+        """
+        # Initialise the passcode with 0x73e2
+        passcode = 0x73e2
+
+        # Strip the SSID off the callsign, and convert it to uppercase
+        base_call = callsign.split("-")[0].upper()
+
+        # The algorithm XORs each character of the callsign with the passcode, alternating between
+        # shifting the ASCII value 8 bits to the left
+        high = True
+        for c in base_call:
+            if high:
+                passcode ^= (ord(c) << 8)
+                high = False
+            else:
+                passcode ^= ord(c)
+                high = True
+
+        # Return the passcode as a string
+        return str(passcode)
+
+    @classmethod
+    def validate_passcode(cls, callsign: str, passcode: str) -> bool:
+        """
+        Validate an APRS-IS passcode for a given callsign.
+
+        :param str callsign: a callsign, with or without an SSID
+        :param str passcode: a passcode
+
+        This will generate a passcode for the given callsign, and compare it to the provided
+        passcode.
+        """
+        # Strip the SSID off the callsign, and convert it to uppercase
+        base_call = callsign.split("-")[0].upper()
+
+        # Generate a passcode for the given callsign
+        generated_passcode = cls.generate_passcode(base_call)
+
+        # Check to see if it matches the passcode we generated
+        if passcode == generated_passcode:
+            # Passcode matches
+            return True
+        else:
+            # Passcode does not match
+            return False
