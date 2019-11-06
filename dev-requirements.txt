@@ -3,3 +3,5 @@ pytest==5.2.0
 pytest-cov==2.8.0
 pytest-mock==1.11.2
 Sphinx==2.2.0
+sphinx-rtd-theme==0.4.3
+rstvalidator==2019.4.13
