@@ -12,15 +12,16 @@ Introduction
 Currently supports:-
 
 - Decoding
- - Standard compressed/uncompressed location packets
- - Mic-E location packets
- - Message packets (including bulletins and announcements)
- - Status report packets
+   - Standard compressed/uncompressed location packets
+   - Mic-E location packets
+   - Message packets (including bulletins and announcements)
+   - Status report packets
+
 
 - Encoding
- - Uncompressed location packets
- - Message packets
- - 
+   - Uncompressed location packets
+   - Message packets
+
 
 Usage
 -----
