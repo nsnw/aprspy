@@ -120,15 +120,21 @@ class StatusPacket(GenericPacket):
         else:
             # Check for a timestamp
             if re.match("^[0-9]{6}z", self._info):
-                self.timestamp = APRSUtils.decode_timestamp(self._info[0:7])
-                # Sanity check the timestamp type - status reports can only use zulu
-                # or local, so if hms is used, throw an error.
-                # if timestamp_type == 'h' and data_type_id == '>':
-                #     logger.error("Timestamp type 'h' cannot be used for status reports")
-                #     raise ParseError("Timestamp type 'h' cannot be used for status reports")
+                try:
+                    self.timestamp = APRSUtils.decode_timestamp(self._info[0:7])
+                    # TODO Sanity check the timestamp type - status reports can only use zulu
+                    # or local, so if hms is used, throw an error.
+                    # if timestamp_type == 'h' and data_type_id == '>':
+                    #     logger.error("Timestamp type 'h' cannot be used for status reports")
+                    #     raise ParseError("Timestamp type 'h' cannot be used for status reports")
+                    logger.debug("Status message timestamp is {}".format(self.timestamp))
+
+                except ParseError:
+                    self.timestamp = None
+
                 self.status_message = self._info[7:]
-                logger.debug("Status message timestamp is {}".format(self.timestamp))
                 logger.debug("Status message is {}".format(self.status_message))
+
             else:
                 self.status_message = self._info
                 logger.debug("No timestamp found")
