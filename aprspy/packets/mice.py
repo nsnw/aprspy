@@ -128,9 +128,13 @@ class MICEPacket(PositionPacket):
 
         # Now that we have an uncompressed latitude, we can decode it like a standard uncompressed
         # packet
-        decoded_latitude, ambiguity = APRSUtils.decode_uncompressed_latitude(
-            "{}{}".format(latitude, north_south)
-        )
+        try:
+            decoded_latitude, ambiguity = APRSUtils.decode_uncompressed_latitude(
+                "{}{}".format(latitude, north_south)
+            )
+
+        except ValueError as e:
+            raise ParseError(e)
 
         logger.debug(
             "After destination field decoding, latitude is {}{} ({} - {}), longitude offset is {}, "
@@ -163,9 +167,14 @@ class MICEPacket(PositionPacket):
         logger.debug("Info input: {}".format(info))
         # The degrees, minutes and hundreths of minutes are obtained by subtracting 28 from the
         # ASCII values of the 3 characters
-        lng_deg = ord(info[0]) - 28
-        lng_min = ord(info[1]) - 28
-        lng_hmin = ord(info[2]) - 28
+
+        try:
+            lng_deg = ord(info[0]) - 28
+            lng_min = ord(info[1]) - 28
+            lng_hmin = ord(info[2]) - 28
+
+        except IndexError as e:
+            raise ParseError("Invalid longitude: {}".format(e))
 
         # If the longitude offset is set, apply it to the degrees value
         if lng_offset:
@@ -184,12 +193,17 @@ class MICEPacket(PositionPacket):
             lng_min -= 60
 
         # Now that we have an uncompressed longitude, we can decode it
-        longitude = APRSUtils.decode_uncompressed_longitude("{}{}.{}{}".format(
-            str(lng_deg).zfill(3),
-            str(lng_min).zfill(2),
-            str(lng_hmin).zfill(2),
-            east_west
-        ))
+        try:
+            longitude = APRSUtils.decode_uncompressed_longitude("{}{}.{}{}".format(
+                str(lng_deg).zfill(3),
+                str(lng_min).zfill(2),
+                str(lng_hmin).zfill(2),
+                east_west
+            ))
+
+        except ValueError as e:
+            raise ParseError(e)
+
         logger.debug(
             "Longitude is {} {} {} ({})".format(lng_deg, lng_min, lng_hmin, longitude)
         )
