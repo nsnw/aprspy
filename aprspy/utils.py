@@ -73,9 +73,6 @@ class APRSUtils:
             direction = latitude[-1]
             logger.debug("Direction: {}".format(direction))
 
-        except ValueError:
-            raise
-
         except Exception as e:
             raise ParseError("Couldn't parse latitude {}: {}".format(
                 latitude, e
@@ -463,12 +460,13 @@ class APRSUtils:
         """
 
         logger.debug("Raw timestamp is {}".format(raw_timestamp))
-        ts = re.match(r'^(\d{6})([\/hz])', raw_timestamp)
+        ts = re.match(r'^(\d{6})(.)', raw_timestamp)
         if ts:
             timestamp, timestamp_type = ts.groups()
 
             # Parse the timestamp type
-            if timestamp_type == 'z':
+            # APRS 1.01 specifies 'z' for zulu time, but some clients use 'Z'
+            if timestamp_type == 'z' or timestamp_type == 'Z':
                 timestamp_type = 'zulu'
                 logger.debug("Timestamp is zulu time")
             elif timestamp_type == '/':
@@ -477,6 +475,11 @@ class APRSUtils:
             elif timestamp_type == 'h':
                 timestamp_type = 'hms'
                 logger.debug("Timestamp is hhmmss time")
+            else:
+                # This is against spec, but as usual with APRS a lot of clients violate this - so
+                # assume they're zulu time
+                logger.warning("{} is an invalid timestamp type, assuming zulu".format(timestamp_type))
+                timestamp_type = 'zulu'
 
             # Get the current UTC ('zulu') time for comparison. Since timestamps in HHMMSS format
             # have no date information, we need to determine if the timestamp is for today or
@@ -495,6 +498,7 @@ class APRSUtils:
                     # Generate a datetime object
                     ts = datetime(utc.year, utc.month, utc.day, hour, minute, second)
                 except ValueError as e:
+                    logger.error("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
                     raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
 
                 # Check it's not in the future
@@ -515,6 +519,11 @@ class APRSUtils:
                     # air", so hopefully this shouldn't be a problem in reality.
                     logger.info("Local time specified in timestamp, assuming UTC.")
 
+                # Sometimes, 000000 is used to indicate no timestamp is available
+                if timestamp[0:6] == "000000":
+                    logger.warning("Timestamp specified but is set to all zeroes.")
+                    return None, timestamp_type
+
                 # DDHHMM
                 day = int(timestamp[0:2])
                 hour = int(timestamp[2:4])
@@ -523,8 +532,9 @@ class APRSUtils:
                 # TODO - handle broken timestamps a bit nicer
                 try:
                     ts = datetime(utc.year, utc.month, day, hour, minute, 0)
-                except ValueError:
-                    raise ParseError("Error parsing timestamp: {}".format(timestamp))
+                except ValueError as e:
+                    logger.warning("Error parsing timestamp '{}': {}".format(timestamp, e))
+                    raise ParseError("Error parsing timestamp '{}': {}".format(timestamp, e))
 
                 # Check it's not in the future
                 if ts > utc:
