@@ -100,11 +100,16 @@ class Station:
                 # Valid SSID
                 if re.match(r'^[0-9]{1,2}', value):
                     # Can we convert it to an int?
-                    if int(value) == 0:
-                        self._ssid = None
-                    elif int(value) <= 15:
-                        self._ssid = int(value)
-                    else:
+                    try:
+                        if int(value) == 0:
+                            self._ssid = None
+                        elif int(value) <= 15:
+                            self._ssid = int(value)
+                        else:
+                            self._ssid = value
+
+                    except ValueError:
+                        # Not an integer
                         self._ssid = value
                 else:
                     self._ssid = value
@@ -197,7 +202,7 @@ class PathHop:
             if value[0:2] == "qA":
                 try:
                     self._hop = QConstruct(value=value)
-                except KeyError:
+                except (KeyError, ValueError):
                     raise ParseError("Invalid q construct: {}".format(value))
 
             # Check for a trailing *
