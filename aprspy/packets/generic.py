@@ -1,14 +1,48 @@
 #!/usr/bin/env python
 
 import logging
+import json
+import enum
+import re
 
 from typing import Union
+from geopy.point import Point
+from datetime import datetime
+from bitstring import Bits
 
 from ..components import Path, Station
 from ..exceptions import GenerateError
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+
+class PacketJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        try:
+            if type(o) is datetime:
+               return o.strftime('%c')
+            elif type(o) is Bits:
+                return o.bin
+            else:
+                j = {}
+                for a, v in o.__dict__.items():
+                    name = re.sub(r'^_', '', a)
+                    if type(v) is Point:
+                        j[name] = {
+                            "latitude": v.latitude,
+                            "longitude": v.longitude,
+                            "altitude": v.altitude
+                        }
+                    elif type(v) is not enum.EnumMeta:
+                        j[name] = v
+
+                return j
+
+        except:
+            breakpoint()
+            raise
+            pass
 
 
 class GenericPacket:
@@ -174,6 +208,9 @@ class GenericPacket:
                 self._raw.source, self._raw.destination, self._raw.path, self._raw.information
             )
 
+    def _parse(self) -> bool:
+        return True
+
     def generate(self):
         """
         Generate an APRS packet based on the current object's properties.
@@ -207,6 +244,11 @@ class GenericPacket:
             raise GenerateError("Missing info")
 
         return output
+
+    def to_json(self):
+        j = PacketJSONEncoder().encode(self)
+
+        return j
 
     def __repr__(self):
         if self.source:
