@@ -49,7 +49,7 @@ def test_decode_uncompressed_latitude_with_ambiguity_4():
 
 
 def test_decode_uncompressed_latitude_invalid_latitude():
-    with pytest.raises(ValueError):
+    with pytest.raises(ParseError):
         # 91 degrees north is not a valid latitude
         APRSUtils.decode_uncompressed_latitude("9100.00N")
 
@@ -395,9 +395,10 @@ def test_decode_timestamp_hms_time():
     assert timestamp.second == 17
 
 
-def test_decode_timestamp_invalid_time_format():
-    with pytest.raises(ParseError):
-        APRSUtils.decode_timestamp("234517m")
+# Allow technically against spec timezone formats, so disable this test
+# def test_decode_timestamp_invalid_time_format():
+#    with pytest.raises(ParseError):
+#        APRSUtils.decode_timestamp("234517m")
 
 
 def test_decode_timestamp_zulu_invalid_time_value():
