@@ -82,13 +82,12 @@ class MessagePacket(GenericPacket):
         elif type(value) is str:
             if len(value) > 67:
                 # The maximum length of a message is 67 characters (C14 P71)
-                raise ValueError(
-                    "Message length cannot be longer than 67 characters ({} given)".format(
+                logger.warning(
+                    "Message length should not be longer than 67 characters ({} given)".format(
                         len(value)
                     )
                 )
-            else:
-                self._message = value
+            self._message = value
         else:
             raise TypeError("Message must be of type 'str' ({} given)".format(type(value)))
 
@@ -195,8 +194,12 @@ class MessagePacket(GenericPacket):
         """
 
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        if self._info[9] != ":":
-            raise ParseError("Invalid message packet", self)
+        try:
+            if self._info[9] != ":":
+                raise ParseError("Invalid message packet (missing : in 9th position)", self)
+
+        except IndexError:
+            raise ParseError("Invalid message packet (packet is too short)")
 
         # Split the message into the addressee and the actual message
         addressee = self._info[0:9]
@@ -250,10 +253,21 @@ class MessagePacket(GenericPacket):
             if len(message_id) > 5:
                 raise ParseError("Invalid message ID: {}".format(message_id), self)
 
-            self.message = message
+            try:
+                self.message = message
+
+            except ValueError as e:
+                # Message was too long
+                raise ParseError("Message too long: {}".format(e))
+
             self.message_id = message_id
         else:
-            self.message = message
+            try:
+                self.message = message
+
+            except ValueError as e:
+                # Message was too long
+                raise ParseError("Message too long: {}".format(e))
 
         return True
 
