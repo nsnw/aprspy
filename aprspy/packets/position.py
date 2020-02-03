@@ -391,10 +391,18 @@ class PositionPacket(GenericPacket):
         return them in a tuple.
         """
         # Decode the latitude and ambiguity
-        lat, ambiguity = APRSUtils.decode_uncompressed_latitude(data[0:8])
+        try:
+            lat, ambiguity = APRSUtils.decode_uncompressed_latitude(data[0:8])
+
+        except ValueError as e:
+            raise ParseError("Invalid latitude: {}".format(e))
 
         # Decode the longitude
-        lng = APRSUtils.decode_uncompressed_longitude(data[9:18])
+        try:
+            lng = APRSUtils.decode_uncompressed_longitude(data[9:18])
+
+        except ValueError as e:
+            raise ParseError("Invalid longitude: {}".format(e))
 
         logger.debug("Latitude: {} ({}) Longitude: {}".format(
             lat, ambiguity, lng
@@ -808,7 +816,14 @@ class PositionPacket(GenericPacket):
         The parsed and decoded values are stored in the current object.
         """
 
-        if self.data_type_id == '!':
+        # First, check if this packet has a '!' at an offset position
+        # This is allowed as per APRS 1.01 C5 P18
+        if hasattr(self, '_offset'):
+            # Packets with the '!' offset do not have a timestamp or messaging capabilities
+            # Chop everything off the info field before the '!'
+            self._info = self._info[self._offset:]
+
+        elif self.data_type_id == '!':
             # Packet has no timestamp, station has no messaging capability
             self.timestamp = None
             self.messaging = False
@@ -862,12 +877,14 @@ class PositionPacket(GenericPacket):
 
                     if len(comment) < 8:
                         # Packets with DF information must be at least 8 characters long
-                        raise ParseError("Missing DF values", self)
+                        raise ParseError("Missing DF values")
 
                     if comment[0] != "/" or comment[4] != "/":
                         # Packets with DF information must also include the bearing and NRQ values
                         # See APRS 1.01 C7 P30
-                        raise ParseError("Invalid DF values", self)
+                        raise ParseError(
+                            "Invalid DF values (character in position 0 and 4 should be '/'"
+                        )
 
                     # Extract the bearing
                     self.bearing = int(comment[1:4])
@@ -914,10 +931,18 @@ class PositionPacket(GenericPacket):
 
         else:
             # Parse the compressed position values from the information field
+
+            # Get the compressed position
             compressed_position = data[0:13]
-            (self.latitude, self.longitude, self.altitude, self.course, self.speed,
-             self.radio_range, self.compression_fix, self.compression_source,
-             self.compression_origin) = self._parse_compressed_position(compressed_position)
+
+            try:
+                (self.latitude, self.longitude, self.altitude, self.course, self.speed,
+                self.radio_range, self.compression_fix, self.compression_source,
+                self.compression_origin) = self._parse_compressed_position(compressed_position)
+
+            except Exception as e:
+                # TODO Catch specific errors (for example, OverflowError)
+                raise ParseError("Couldn't parse compressed position: {}".format(e))
 
             # Ensure compressed is set to True
             self.compressed = True
