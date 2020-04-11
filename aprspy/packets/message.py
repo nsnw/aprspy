@@ -34,12 +34,12 @@ class MessagePacket(GenericPacket):
         :param str group_bulletin_name: the group bulletin name
         """
         super().__init__(*args, **kwargs)
-        self._addressee = None
-        self._message = None
-        self._message_id = None
-        self._bulletin_id = None
-        self._announcement_id = None
-        self._group_bulletin_name = None
+        self._addressee = addressee
+        self._message = message
+        self._message_id = message_id
+        self._bulletin_id = bulletin_id
+        self._announcement_id = announcement_id
+        self._group_bulletin_name = group_bulletin_name
 
         # Set the data type ID
         self.data_type_id = ":"
