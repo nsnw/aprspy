@@ -84,6 +84,12 @@ def test_encode_uncompressed_latitude_without_ambiguity():
     assert latitude == "5128.43N"
 
 
+def test_encode_uncompressed_latitude_padding():
+    # Test latitude
+    latitude = APRSUtils.encode_uncompressed_latitude(5)
+    assert latitude == "0500.00N"
+
+
 def test_encode_uncompressed_latitude_with_ambiguity_1():
     # Test latitude with differing levels of ambiguity
     latitude = APRSUtils.encode_uncompressed_latitude(51.473821, 1)
@@ -211,6 +217,12 @@ def test_encode_uncompressed_longitude_without_ambiguity():
     # Test longitude
     longitude = APRSUtils.encode_uncompressed_longitude(-114.434325)
     assert longitude == "11426.06W"
+
+
+def test_encode_uncompressed_longitude_padding():
+    # Test longitude
+    longitude = APRSUtils.encode_uncompressed_longitude(4)
+    assert longitude == "00400.00E"
 
 
 def test_encode_uncompressed_longitude_with_ambiguity_1():

@@ -138,17 +138,20 @@ class APRSUtils:
         # Get the minutes of latitude
         minutes = "{:0.2f}".format(round((latitude - degrees) * 60, 2)).zfill(5)
 
+        # Zero-pad the degrees
+        degrees_padded = str(degrees).zfill(2)
+
         # Apply ambiguity
         if ambiguity == 0:
-            lat = "{}{}".format(degrees, minutes)
+            lat = "{}{}".format(degrees_padded, minutes)
         elif ambiguity == 1:
-            lat = "{}{} ".format(degrees, minutes[:-1])
+            lat = "{}{} ".format(degrees_padded, minutes[:-1])
         elif ambiguity == 2:
-            lat = "{}{}  ".format(degrees, minutes[:-2])
+            lat = "{}{}  ".format(degrees_padded, minutes[:-2])
         elif ambiguity == 3:
-            lat = "{}{} .  ".format(degrees, minutes[:-4])
+            lat = "{}{} .  ".format(degrees_padded, minutes[:-4])
         elif ambiguity == 4:
-            lat = "{}  .  ".format(degrees)
+            lat = "{}  .  ".format(degrees_padded)
 
         return f"{lat}{direction}"
 
@@ -200,17 +203,20 @@ class APRSUtils:
         # Get the minutes of longitude
         minutes = "{:0.2f}".format(round((longitude - degrees) * 60, 2)).zfill(5)
 
+        # Zero-pad the degrees
+        degrees_padded = str(degrees).zfill(3)
+
         # Apply ambiguity
         if ambiguity == 0:
-            lng = "{}{}".format(degrees, minutes)
+            lng = "{}{}".format(degrees_padded, minutes)
         elif ambiguity == 1:
-            lng = "{}{} ".format(degrees, minutes[:-1])
+            lng = "{}{} ".format(degrees_padded, minutes[:-1])
         elif ambiguity == 2:
-            lng = "{}{}  ".format(degrees, minutes[:-2])
+            lng = "{}{}  ".format(degrees_padded, minutes[:-2])
         elif ambiguity == 3:
-            lng = "{}{} .  ".format(degrees, minutes[:-4])
+            lng = "{}{} .  ".format(degrees_padded, minutes[:-4])
         elif ambiguity == 4:
-            lng = "{}  .  ".format(degrees)
+            lng = "{}  .  ".format(degrees_padded)
 
         return f"{lng}{direction}"
 
