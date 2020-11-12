@@ -20,7 +20,7 @@ from .packets.telemetry_definition import TelemetryParameterNamePacket, Telemetr
     TelemetryEquationCoefficientsPacket, TelemetryBitSenseProjectNamePacket
 from .packets.station_capability import StationCapabilityPacket
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 # Set up logging
 logger = logging.getLogger(__name__)
