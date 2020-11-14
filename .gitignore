@@ -6,3 +6,4 @@ build/
 dist/
 aprspy.egg-info/
 .python-version
+venv/
