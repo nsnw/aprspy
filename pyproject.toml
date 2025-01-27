@@ -24,4 +24,7 @@ poetry-plugin-shell = "^1.0.1"
 mock = "^5.1.0"
 pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
+sphinx = "^8.1.3"
+sphinx-rtd-theme = "^3.0.2"
+rstvalidator = "^2020.12.3"
 
