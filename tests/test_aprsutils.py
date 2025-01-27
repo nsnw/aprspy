@@ -1,7 +1,7 @@
 import pytest
 import mock
 
-from datetime import datetime
+from datetime import datetime, UTC
 
 from aprspy.utils import APRSUtils
 from aprspy.exceptions import ParseError
@@ -425,7 +425,7 @@ def test_decode_timestamp_hms_invalid_time_value():
 
 def test_decode_timestamp_in_previous_month():
     # Fake the date, ensure we get returned the previous month
-    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 10, 10)):
+    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 10, 10, tzinfo=UTC)):
         timestamp, timestamp_type = APRSUtils.decode_timestamp("302345z")
 
         assert timestamp.day == 30
@@ -434,7 +434,7 @@ def test_decode_timestamp_in_previous_month():
 
 def test_decode_timestamp_in_previous_year():
     # Fake the date, ensure we get returned the previous month
-    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 1, 10)):
+    with mock.patch('aprspy.utils.APRSUtils._get_utc', return_value=datetime(2019, 1, 10, tzinfo=UTC)):
         timestamp, timestamp_type = APRSUtils.decode_timestamp("302345z")
 
         assert timestamp.day == 30
