@@ -3,11 +3,8 @@
 import re
 import logging
 import math
-
-from datetime import datetime, timedelta
-
+from datetime import datetime, timedelta, UTC
 from typing import Union, Tuple, Optional
-
 from .exceptions import ParseError
 
 # Set up logging
@@ -23,7 +20,7 @@ class APRSUtils:
     """
     @staticmethod
     def _get_utc():
-        return datetime.utcnow()
+        return datetime.now(UTC)
 
     @staticmethod
     def decode_uncompressed_latitude(latitude: str) -> Tuple[Union[int, float], int]:
@@ -502,7 +499,15 @@ class APRSUtils:
 
                 try:
                     # Generate a datetime object
-                    ts = datetime(utc.year, utc.month, utc.day, hour, minute, second)
+                    ts = datetime(
+                        year=utc.year,
+                        month=utc.month,
+                        day=utc.day,
+                        hour=hour,
+                        minute=minute,
+                        second=second,
+                        tzinfo=UTC
+                    )
                 except ValueError as e:
                     logger.error("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
                     raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
@@ -537,7 +542,15 @@ class APRSUtils:
 
                 # TODO - handle broken timestamps a bit nicer
                 try:
-                    ts = datetime(utc.year, utc.month, day, hour, minute, 0)
+                    ts = datetime(
+                        year=utc.year,
+                        month=utc.month,
+                        day=day,
+                        hour=hour,
+                        minute=minute,
+                        second=0,
+                        tzinfo=UTC
+                    )
                 except ValueError as e:
                     logger.warning("Error parsing timestamp '{}': {}".format(timestamp, e))
                     raise ParseError("Error parsing timestamp '{}': {}".format(timestamp, e))
@@ -550,11 +563,27 @@ class APRSUtils:
                     # dirty hacks.
                     if 1 < ts.month <= 12:
                         month = ts.month - 1
-                        ts = datetime(utc.year, month, day, hour, minute, 0)
+                        ts = datetime(
+                            year=utc.year,
+                            month=month,
+                            day=day,
+                            hour=hour,
+                            minute=minute,
+                            second=0,
+                            tzinfo=UTC
+                        )
                     elif ts.month == 1:
                         year = ts.year - 1
                         month = 12
-                        ts = datetime(year, month, day, hour, minute, 0)
+                        ts = datetime(
+                            year=year,
+                            month=month,
+                            day=day,
+                            hour=hour,
+                            minute=minute,
+                            second=0,
+                            tzinfo=UTC
+                        )
 
                 # Convert to seconds
                 logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))
