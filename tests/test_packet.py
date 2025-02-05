@@ -1,7 +1,11 @@
-# import pytest
-#
-# from aprspy import APRS, StatusPacket
-# from aprspy.exceptions import ParseError
+import pytest
+
+from aprspy import APRS, Packet
+from aprspy.exceptions import ParseError
+
+
+
+
 #
 # # Input packets
 # raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>211248zPHG71801/Test status'

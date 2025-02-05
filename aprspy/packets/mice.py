@@ -251,7 +251,7 @@ class MICEPacket(PositionPacket):
 
         return (speed, course)
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a Mic-E packet.
 

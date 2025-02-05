@@ -1,12 +1,14 @@
-#!/usr/bin/env python
-
 import logging
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
-class ParseError(Exception):
+class APRSException(Exception):
+    pass
+
+
+class ParseError(APRSException):
     """
     Parsing exception
     """
@@ -16,7 +18,7 @@ class ParseError(Exception):
         self.packet = packet
 
 
-class GenerateError(Exception):
+class GenerateError(APRSException):
     """
     Generating exception
     """
@@ -26,7 +28,7 @@ class GenerateError(Exception):
         self.packet = packet
 
 
-class UnsupportedError(Exception):
+class UnsupportedError(APRSException):
     """
     Thrown when packets are of an unsupported format
     """
@@ -34,3 +36,17 @@ class UnsupportedError(Exception):
         super().__init__(message)
 
         self.packet = packet
+
+
+class InvalidSourceException(APRSException):
+    """
+    Thrown when a source value is invalid.
+    """
+    pass
+
+
+class InvalidDestinationException(APRSException):
+    """
+    Thrown when a destination value is invalid.
+    """
+    pass

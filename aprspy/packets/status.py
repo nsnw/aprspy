@@ -46,14 +46,14 @@ class StatusPacket(GenericPacket):
         """Set the Maidenhead locator"""
         self._maidenhead_locator = value
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a status report packet.
 
         Status reports contain a status message and optionally a timestamp or Maidenhead locator
         (but not both), and/or a beam heading and ERP value.
 
-        Parse and decoded values are stored in the current object.
+        Parsed and decoded values are stored in the current object.
         """
 
         # Maidenhead locators, if present, must be first, and can be 4 or 6 characters.

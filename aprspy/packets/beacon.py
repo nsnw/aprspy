@@ -31,7 +31,7 @@ class BeaconPacket(GenericPacket):
         """Set the comment"""
         self._comment = value
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a beacon packet.
         """

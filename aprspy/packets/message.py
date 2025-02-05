@@ -186,7 +186,7 @@ class MessagePacket(GenericPacket):
                 type(value))
             )
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a message packet.
 
@@ -246,7 +246,7 @@ class MessagePacket(GenericPacket):
 
         if '{' in message:
             # Check for a message ID
-            message, message_id = message.split("{")
+            message, message_id = message.split("{", maxsplit=1)
             logger.debug("Message has message ID {}".format(message_id))
 
             # Message IDs must not be longer than 5 characters (C14 P71)

@@ -6,8 +6,10 @@ import logging
 from hashlib import md5
 from collections import namedtuple
 from datetime import datetime
+from typing import Type
 
 from .exceptions import ParseError, UnsupportedError
+from .packets.base import Packet
 from .packets.generic import GenericPacket
 from .packets.beacon import BeaconPacket
 from .packets.position import PositionPacket
@@ -19,8 +21,8 @@ from .packets.telemetry import TelemetryPacket
 from .packets.telemetry_definition import TelemetryParameterNamePacket, TelemetryUnitLabelPacket,\
     TelemetryEquationCoefficientsPacket, TelemetryBitSenseProjectNamePacket
 from .packets.station_capability import StationCapabilityPacket
-
-__version__ = "0.3.3"
+from .packets.user_defined import UserDefinedPacket
+from .packets.item_report import ItemReportPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -34,13 +36,6 @@ BEACON_ADDRESSES = [
 ]
 
 
-def _handle_err(exception: Exception, packet: str, strict_mode: bool = True):
-    if not strict_mode:
-        logger.warning("Returning generic packet for: {}".format(packet))
-    else:
-        raise exception
-
-
 class APRS:
     """
     Main APRS class.
@@ -48,181 +43,324 @@ class APRS:
     This class provides functions for parsing and decoding different kinds of APRS packets.
     Packet type-specific functions are defined under the different :class:`APRSPacket` subclasses.
     """
+    @classmethod
+    def handle_exception(cls, exception: Exception, packet: str, strict_mode: bool = True):
+        if not strict_mode:
+            logger.warning("Returning generic packet for: {}".format(packet))
+        else:
+            raise exception
 
-    @staticmethod
-    def parse(packet: str = None, timestamp: datetime = None,
-              strict_mode: bool = True) -> GenericPacket:
+    @classmethod
+    def validate_source(cls, source: str) -> bool:
         """
-        Parse an APRS packet, and return a subclass of :class:`APRSPacket` appropriate for the
-        packet type.
-
-        :param str packet: a raw packet
-        :param datetime timestamp: an (optional) timestamp indicating when the packet arrived
-
-        Given a raw packet, this function will return a object that is a subclass of
-        :class:`APRSPacket`.
+        Validate the source callsign, ensuring that it is no longer than 7 characters with an optional
+        SSID.
         """
+        if re.match(r'^[A-Z0-9]{1,6}$', source):
+            # Match callsign without SSID, up to a maximum of 6 characters.
+            return True
 
+        elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', source):
+            # Match callsign with SSID, up to a maximum of 6 characters.
+            return True
+
+        else:
+            # Not a valid source callsign.
+            raise ParseError(
+                f"Invalid source callsign: {source}"
+            )
+
+    @classmethod
+    def validate_destination(cls, destination: str) -> bool:
+        """
+        Validate the destination callsign, ensuring that it is no longer than 7 characters with an
+        optional SSID.
+        """
+        if re.match(r'^[A-Z0-9]{1,6}$', destination):
+            # Match callsign or data without SSID, up to a maximum of 6 characters.
+            return True
+
+        elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', destination):
+            # Match callsign or data with SSID, up to a maximum of 6 characters.
+            return True
+
+        else:
+            # Not a valid source callsign.
+            raise ParseError(
+                f"Invalid destination callsign or data: {destination}"
+            )
+
+    @classmethod
+    def parse_basic_data(cls, packet: str) -> tuple[str, str, str, str, str]:
+        """
+        Parse the basic data from an APRS packet:-
+
+        * the source callsign
+        * the destination callsign
+        * the packet's path
+        * the data type ID
+        * the information field
+
+        ...and return them as a tuple of strings.
+        """
         try:
-            # Parse out the source, destination, path and information fields
             (source, destination, path, data_type_id, info) = re.match(
-                r'([\w\d\-]+)>([\w\d\-]+),([\w\d\-\*\,]+):(.)(.*)',
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+),([A-Za-z0-9\-*,]+):(.)(.*)',
                 packet
             ).groups()
+
         except AttributeError:
-            _handle_err(
-                ParseError("Could not parse packet details", packet),
-                packet,
-                strict_mode
-            )
-            p = GenericPacket()
+            raise ParseError("Could not parse packet details", packet)
 
-        # Create a checksum, to provide a quick comparison against other packets
-        checksum = md5((source + info).encode()).hexdigest()
-        logger.debug("Packet checksum is {}".format(checksum))
+        # Validate the source and destination callsigns.
+        cls.validate_source(source)
+        cls.validate_destination(destination)
 
-        logger.debug("Raw packet: {}".format(packet))
+        return source, destination, path, data_type_id, info
 
-        # Do some basic sanity checking
-        # The source and destination fields should be a maximum of 9 characters
-        logger.debug("Destination length is {}".format(len(destination)))
-        if len(source) > 9:
-            _handle_err(
-                ParseError("Source address is longer than 9 characters", packet),
-                packet,
-                strict_mode
-            )
-            p = GenericPacket()
+    @classmethod
+    def is_beacon_destination(cls, destination: str) -> bool:
+        """
+        Check if the destination callsign is one of the common beacon addresses.
+        """
+        return destination in BEACON_ADDRESSES
 
-        elif len(destination) > 9:
-            _handle_err(
-                ParseError("Destination address is longer than 9 characters", packet),
-                packet,
-                strict_mode
-            )
-            p = GenericPacket()
+    @classmethod
+    def is_position_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a position packet.
+        """
+        return data_type_id in '!/=@'
 
-        # The destination field should be upper case
-        if not re.match(r'^[A-Z0-9]{1,6}(\-[0-9]{1,2})?$', destination):
-            _handle_err(
-                ParseError("Destination address is invalid", packet),
-                packet,
-                strict_mode
-            )
-            p = GenericPacket()
+    @classmethod
+    def is_mic_e_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a Mic-E packet.
+        """
+        return data_type_id in "`'"
 
-        # Check for common beacon destinations
-        if destination in BEACON_ADDRESSES:
+    @classmethod
+    def is_object_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates an object packet.
+        """
+        return data_type_id == ";"
+
+    @classmethod
+    def is_item_report_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates an item report packet.
+        """
+        return data_type_id == ")"
+
+    @classmethod
+    def is_message_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a message packet.
+        """
+        return data_type_id == ":"
+
+    @classmethod
+    def is_telemetry_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a telemetry packet.
+        """
+        return data_type_id == "T"
+
+    @classmethod
+    def is_status_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a status packet.
+        """
+        return data_type_id == ">"
+
+    @classmethod
+    def is_station_capability_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a station capability packet.
+        """
+        return data_type_id == "<"
+
+    @classmethod
+    def is_raw_nmea_position_report_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a raw NMEA position report packet.
+        """
+        return data_type_id == "$"
+
+    @classmethod
+    def is_positionless_weather_report_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a positionless weather report packet.
+        """
+        return data_type_id == "_"
+
+    @classmethod
+    def is_complete_weather_report_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a complete weather report packet.
+        """
+        return data_type_id == "*"
+
+    @classmethod
+    def is_user_defined_data_type_id(cls, data_type_id: str) -> bool:
+        """
+        Check if the data type ID indicates a user-defined packet.
+        """
+        return data_type_id == "{"
+
+    @classmethod
+    def is_telemetry_parameter_name_packet(cls, packet: str) -> bool:
+        """
+        Check if the packet is a telemetry parameter name packet.
+        """
+        if re.match(r'::[A-Za-z0-9\-]+\s?:PARM\.', packet):
+            return True
+
+        return False
+
+    @classmethod
+    def is_telemetry_unit_label_packet(cls, packet: str) -> bool:
+        """
+        Check if the packet is a telemetry unit label packet.
+        """
+        if re.match(r'::[A-Za-z0-9\-]+\s?:UNIT\.', packet):
+            return True
+
+        return False
+
+    @classmethod
+    def is_telemetry_equation_coefficients_packet(cls, packet: str) -> bool:
+        """
+        Check if the packet is a telemetry equation coefficients packet.
+        """
+        if re.match(r'::[A-Za-z0-9\-]+\s?:EQNS\.', packet):
+            return True
+
+        return False
+
+    @classmethod
+    def is_telemetry_bit_sense_project_name_packet(cls, packet: str) -> bool:
+        """
+        Check if the packet is a telemetry bit sense project name packet.
+        """
+        if re.match(r'::[A-Za-z0-9\-]+\s?:BITS\.', packet):
+            return True
+
+        return False
+
+    @classmethod
+    def is_position_info_with_offset(cls, info: str) -> bool:
+        """
+        Check if the packet is a position packet with an offset.
+        """
+        if 0 <= info.find('!') <= 40:
+            return True
+
+        return False
+
+    @classmethod
+    def get_packet_type(
+            cls, packet: str, source: str, destination: str, path: str, data_type_id: str,
+            info: str
+    ) -> Type[Packet]:
+        # Determine the type of packet this is.
+        # There's a ton of different packet types and many different ways in which they're
+        # identified. The APRS spec is at worst a suggestion and there's a lot of variation in
+        # how different packet types are constructed.
+
+        # By default, assume the packet is a generic packet.
+        packet_type = GenericPacket
+
+        # This is used for position packets where the data is offset.
+        offset = None
+
+        # First, check if the destination is one of the common beacon addresses.
+        # If it is, we can be fairly certain that this is a beacon packet.
+        if cls.is_beacon_destination(destination):
             logger.debug("Packet is a beacon packet")
-            p = BeaconPacket()
+            packet_type = BeaconPacket
 
-        elif data_type_id in '!/=@':
+        # Next, check the data type ID to see if it matches those used by position packets.
+        elif cls.is_position_data_type_id(data_type_id):
             logger.debug("Packet is a position packet")
-            p = PositionPacket()
+            packet_type = PositionPacket
 
-            if len(info) < 4:
-                # TODO - handle this properly
-                _handle_err(
-                    ParseError("Packet is too short."),
-                    packet,
-                    strict_mode
-                )
-                p = GenericPacket()
-
-        elif data_type_id in "`'":
+        # Check if the data type ID indicates a Mic-E packet.
+        elif cls.is_mic_e_data_type_id(data_type_id):
             logger.debug("Packet is a Mic-E packet")
-            p = MICEPacket()
+            packet_type = MICEPacket
 
-        elif data_type_id == ";":
+        # Check if the data type ID indicates an object packet.
+        elif cls.is_object_data_type_id(data_type_id):
             logger.debug("Packet is an object packet")
-            p = ObjectPacket()
+            packet_type = ObjectPacket
 
-        elif data_type_id == ")":
-            _handle_err(
-                UnsupportedError("Unsupported data type: '<' (Item Report) - C11 P57"),
-                packet,
-                strict_mode
-            )
-            p = GenericPacket()
+        # Check if the data type ID indicates an item report packet.
+        elif cls.is_item_report_data_type_id(data_type_id):
+            logger.debug("Packet is an item report packet")
+            packet_type = ItemReportPacket
 
-        # Check for the presence of PARM, UNIT, EQNS or BITS, indicating a message defining
-        # telemetry data. The APRS spec places a 67-character limit on the message field, but
-        # it's common to see telemetry definitions exceed this
-        elif re.search(r'::[A-Za-z0-9\-]+\s?:(PARM|UNIT|EQNS|BITS)\.', packet):
-            definition_type = re.search(
-                r'::[A-Za-z0-9\-]+\s?:(PARM|UNIT|EQNS|BITS)\.',
-                packet
-            ).groups()[0]
-
-            if definition_type == "PARM":
-                p = TelemetryParameterNamePacket()
-
-            elif definition_type == "UNIT":
-                p = TelemetryUnitLabelPacket()
-
-            elif definition_type == "EQNS":
-                p = TelemetryEquationCoefficientsPacket()
-
-            elif definition_type == "BITS":
-                p = TelemetryBitSenseProjectNamePacket()
-
-            else:
-                _handle_err(
-                    ParseError("Invalid telemetry definition type: {}".format(definition_type)),
-                    packet,
-                    strict_mode
-                )
-                p = GenericPacket()
-
-        elif data_type_id == ":":
+        # Check if the data type ID indicates a message packet.
+        elif cls.is_message_data_type_id(data_type_id):
             logger.debug("Packet is a message packet")
-            p = MessagePacket()
+            packet_type = MessagePacket
 
-        elif data_type_id == "T":
+        # Check if the data type ID indicates a telemetry packet.
+        # In addiition, the first character of the information field should be a '#'.
+        # This _should_ be the only packet type that uses A-z for the data type ID,
+        # which can clash with X1J-style position packets.
+        elif cls.is_telemetry_data_type_id(data_type_id) and info[1] == "#":
             logger.debug("Packet is a telemetry packet")
-            p = TelemetryPacket()
+            packet_type = TelemetryPacket
 
-        elif data_type_id == ">":
+        # Check if the data type ID indicates a status packet.
+        elif cls.is_status_data_type_id(data_type_id):
             logger.debug("Packet is a status packet")
-            p = StatusPacket()
+            packet_type = StatusPacket
 
-        elif data_type_id == "<":
+        # Check if the data type ID indicates a station capability packet.
+        elif cls.is_station_capability_data_type_id(data_type_id):
             logger.debug("Packet is a station capability packet")
-            p = StationCapabilityPacket()
+            packet_type = StationCapabilityPacket
 
-        elif data_type_id == "$":
-            _handle_err(
-                UnsupportedError("Unsupported data type: '$' (Raw NMEA Position Report)"),
-                packet,
-                strict_mode
+        # Partially-supported packet types.
+        # Check if the data type ID indicates a user-defined packet.
+        elif cls.is_user_defined_data_type_id(data_type_id):
+            logger.debug("Packet is a user-defined packet")
+            logger.warning(
+                "User-defined packets are not fully supported."
             )
-            p = GenericPacket()
+            packet_type = UserDefinedPacket
 
-        elif data_type_id == "_":
-            _handle_err(
-                UnsupportedError("Unsupported data type: '_' (Positionless Weather Report"),
-                packet,
-                strict_mode
+        # Unsupported packet types.
+        # Check if the data type ID indicates a raw NMEA position report packet.
+        elif cls.is_raw_nmea_position_report_data_type_id(data_type_id):
+            raise UnsupportedError(
+                "Unsupported data type: '$' (Raw NMEA Position Report)"
             )
-            p = GenericPacket()
 
-        elif data_type_id == "*":
-            _handle_err(
-                UnsupportedError("Unsupported data type: '*' (Complete Weather Report"),
-                packet,
-                strict_mode
+        # Check if the data type ID indicates a positionless weather report packet.
+        elif cls.is_positionless_weather_report_data_type_id(data_type_id):
+            raise UnsupportedError(
+                "Unsupported data type: '_' (Positionless Weather Report)"
             )
-            p = GenericPacket()
 
-        elif 0 <= info.find('!') <= 40:
-            # As per APRS 1.01 C5 P18, position-without-timestamp packets may have the '!' located
-            # anywhere up to the 40th character in the information field. If we're here, test for
-            # that now.
-            logger.debug("Found ! in information field, parsing as position packet")
-            p = PositionPacket()
+        # Check if the data type ID indicates a complete weather report packet.
+        elif cls.is_complete_weather_report_data_type_id(data_type_id):
+            raise UnsupportedError(
+                "Unsupported data type: '*' (Complete Weather Report)"
+            )
 
-            # Store the offset
-            p._offset = info.find('!')
+        # As per APRS 1.01 C5 P18, position-without-timestamp packets may have the '!' located
+        # anywhere up to the 40th character in the information field. If we're here, test for
+        # that now.
+        elif cls.is_position_info_with_offset(info):
+            logger.debug("Packet is a position packet with an offset")
+            packet_type = PositionPacket
+
+            # Find and store the offset
+            offset = info.find('!')
 
             # Because we normally assume the first character of the info field is the data type ID,
             # update the info field to include it
@@ -231,49 +369,74 @@ class APRS:
             # Set the data type ID
             data_type_id = '!'
 
+        # Some packet types can only be determined based on the contents of the information field.
+        # Check if the packet contains the string "PARM".
+        elif cls.is_telemetry_parameter_name_packet(packet):
+            logger.debug("Packet is a telemetry parameter name packet")
+            packet_type = TelemetryParameterNamePacket
+
+        # Check if the packet contains the string "UNIT".
+        elif cls.is_telemetry_unit_label_packet(packet):
+            logger.debug("Packet is a telemetry unit label packet")
+            packet_type = TelemetryUnitLabelPacket
+
+        # Check if the packet contains the string "EQNS".
+        elif cls.is_telemetry_equation_coefficients_packet(packet):
+            logger.debug("Packet is a telemetry equation coefficients packet")
+            packet_type = TelemetryEquationCoefficientsPacket
+
+        # Check if the packet contains the string "BITS".
+        elif cls.is_telemetry_bit_sense_project_name_packet(packet):
+            logger.debug("Packet is a telemetry bit sense project name packet")
+            packet_type = TelemetryBitSenseProjectNamePacket
+
+        # The end of the road. Anything still unmatched is unsupported (at the moment).
+        # This is mostly packet types that do not conform to the APRS spec.
         else:
-            _handle_err(
-                UnsupportedError("Unknown data type: {} (raw: {})".format(data_type_id, packet)),
-                packet,
-                strict_mode
+            raise ParseError(
+                "Could not determine packet type"
             )
-            # Return a generic APRS Packet with the basic info
-            p = GenericPacket()
+
+        return packet_type
+
+    @classmethod
+    def parse_packet(cls, packet: str) -> Packet | PositionPacket:
+        """
+        Parse an APRS packet, and return an instance of a subclass of :class:`Packet` appropriate for the
+        packet type.
+
+        :param str packet: a raw packet
+        :param datetime timestamp: an (optional) timestamp indicating when the packet arrived
+
+        Given a raw packet, this function will return an object that is a subclass of
+        :class:`Packet`.
+        """
+        logger.debug("Raw packet: {}".format(packet))
+
+        # Parse out the basic details of the packet.
+        (source, destination, path, data_type_id, info) = cls.parse_basic_data(
+            packet=packet
+        )
+
+        # Create a checksum, to provide a quick comparison against other packets
+        checksum = md5((source + info).encode()).hexdigest()
+        logger.debug("Packet checksum is {}".format(checksum))
+
+        packet_type = cls.get_packet_type(
+            packet=packet,
+            source=source,
+            destination=destination,
+            path=path,
+            data_type_id=data_type_id,
+            info=info
+        )
 
         # Set the source, destination, path and information fields, along with the checksum, data
         # type ID and the raw packet
-        p.source = source
-        p.destination = destination
-        p.path = path
-        p._info = info
-        p.checksum = checksum
-        p.data_type_id = data_type_id
-        p._ts = timestamp
-
-        # Add the raw values to the packet object
-        p._raw = Raw(source=source, destination=destination, path=path, information=info)
-
-        # Call the packet-specific parser
-        try:
-            p._parse()
-
-        except ParseError as e:
-            _handle_err(
-                e, packet, strict_mode
-            )
-
-            p = GenericPacket()
-
-            p.source = source
-            p.destination = destination
-            p.path = path
-            p._info = info
-            p.checksum = checksum
-            p.data_type_id = data_type_id
-            p._ts = timestamp
-
-            # Add the raw values to the packet object
-            p._raw = Raw(source=source, destination=destination, path=path, information=info)
-
-        # Return the packet object
-        return p
+        return packet_type(
+            source=source,
+            destination=destination,
+            path=path,
+            data_type_id=data_type_id,
+            info=info
+        )

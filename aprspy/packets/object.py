@@ -19,5 +19,5 @@ class ObjectPacket(GenericPacket):
         else:
             return "<ObjectPacket>"
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         return True
