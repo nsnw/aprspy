@@ -66,7 +66,7 @@ class APRS:
         try:
             # Parse out the source, destination, path and information fields
             (source, destination, path, data_type_id, info) = re.match(
-                r'([\w\d\-]+)>([\w\d\-]+),([\w\d\-\*\,]+):(.)(.*)',
+                r'([\w\d\-]+)>([\w\d\-]+)(?:,([\w\d\-\*\,]+))?:(.)(.*)',
                 packet
             ).groups()
         except AttributeError:
