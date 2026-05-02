@@ -174,7 +174,7 @@ class TelemetryPacket(GenericPacket):
     def comment(self, value: str):
         self._comment = value
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a telemetry packet.
 

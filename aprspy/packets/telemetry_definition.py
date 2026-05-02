@@ -43,7 +43,7 @@ class TelemetryDefinitionPacket(GenericPacket):
 
 
 class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
         try:
             if self._info[9] != ":":

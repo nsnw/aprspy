@@ -1,71 +1,62 @@
 import pytest
 
-from aprspy import APRS, StatusPacket
+from aprspy import APRS
+from aprspy.packets.status import StatusPacket
 from aprspy.exceptions import ParseError
 
-# Input packets
-raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>211248zPHG71801/Test status'
-raw_with_timestamp = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>091234zTest status with a timestamp'
-raw_without_timestamp = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>Test status without a timestamp'
-raw_with_mh6 = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/- Test status with 6 digit Maidenhead locator'
-raw_with_mh6_without_status = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-'
-raw_with_mh4 = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/- Test status with 4 digit Maidenhead locator'
-raw_with_mh4_without_status = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-'
-raw_with_hdg_and_pwr = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>Test status with heading and power^B7'
+
+RAW = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>211248zPHG71801/Test status'
+RAW_WITH_TIMESTAMP = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>091234zTest status with a timestamp'
+RAW_WITHOUT_TIMESTAMP = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>Test status without a timestamp'
+RAW_WITH_MH6 = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/- Test status with 6 digit Maidenhead locator'
+RAW_WITH_MH6_WITHOUT_STATUS = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-'
+RAW_WITH_MH4 = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/- Test status with 4 digit Maidenhead locator'
+RAW_WITH_MH4_WITHOUT_STATUS = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-'
+RAW_WITH_HDG_AND_PWR = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>Test status with heading and power^B7'
 
 
 @pytest.fixture
 def packet():
-    packet = APRS.parse(raw)
-    return packet
+    return APRS.parse_packet(RAW)
 
 
 @pytest.fixture
 def packet_with_timestamp():
-    packet = APRS.parse(raw_with_timestamp)
-    return packet
+    return APRS.parse_packet(RAW_WITH_TIMESTAMP)
 
 
 @pytest.fixture
 def packet_without_timestamp():
-    packet = APRS.parse(raw_without_timestamp)
-    return packet
+    return APRS.parse_packet(RAW_WITHOUT_TIMESTAMP)
 
 
 @pytest.fixture
 def packet_with_mh6():
-    packet = APRS.parse(raw_with_mh6)
-    return packet
+    return APRS.parse_packet(RAW_WITH_MH6)
 
 
 @pytest.fixture
 def packet_with_mh6_without_status():
-    packet = APRS.parse(raw_with_mh6_without_status)
-    return packet
+    return APRS.parse_packet(RAW_WITH_MH6_WITHOUT_STATUS)
 
 
 @pytest.fixture
 def packet_with_mh4():
-    packet = APRS.parse(raw_with_mh4)
-    return packet
+    return APRS.parse_packet(RAW_WITH_MH4)
 
 
 @pytest.fixture
 def packet_with_mh4_without_status():
-    packet = APRS.parse(raw_with_mh4_without_status)
-    return packet
+    return APRS.parse_packet(RAW_WITH_MH4_WITHOUT_STATUS)
 
 
 @pytest.fixture
 def packet_with_hdg_and_pwr():
-    packet = APRS.parse(raw_with_hdg_and_pwr)
-    return packet
+    return APRS.parse_packet(RAW_WITH_HDG_AND_PWR)
 
 
 def test_empty_packet():
-    packet = StatusPacket()
-
-    assert repr(packet) == "<StatusPacket>"
+    assert repr(StatusPacket()) == "<StatusPacket>"
 
 
 def test_type(packet):
@@ -82,6 +73,17 @@ def test_data_type_id(packet):
 
 def test_status_message(packet):
     assert packet.status_message == "PHG71801/Test status"
+
+
+def test_with_timestamp(packet_with_timestamp):
+    assert packet_with_timestamp.timestamp.day == 9
+    assert packet_with_timestamp.timestamp.hour == 12
+    assert packet_with_timestamp.timestamp.minute == 34
+
+
+def test_without_timestamp(packet_without_timestamp):
+    assert packet_without_timestamp.timestamp is None
+    assert packet_without_timestamp.status_message == "Test status without a timestamp"
 
 
 def test_with_mh6_maidenhead_locator(packet_with_mh6):
@@ -130,14 +132,13 @@ def test_with_hdg_and_pwr_status_message(packet_with_hdg_and_pwr):
 
 def test_invalid_mh6_status_message_missing_initial_space():
     with pytest.raises(ParseError):
-        # Invalid status message - missing initial space
-        raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator'
-        APRS.parse(raw)
+        APRS.parse_packet(
+            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator'
+        )
 
 
 def test_invalid_mh4_status_message_missing_initial_space():
-
     with pytest.raises(ParseError):
-        # Invalid status message - missing initial space
-        raw = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-Test status with 4 digit Maidenhead locator'
-        APRS.parse(raw)
+        APRS.parse_packet(
+            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-Test status with 4 digit Maidenhead locator'
+        )

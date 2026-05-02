@@ -46,14 +46,14 @@ class StatusPacket(GenericPacket):
         """Set the Maidenhead locator"""
         self._maidenhead_locator = value
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """
         Parse a status report packet.
 
         Status reports contain a status message and optionally a timestamp or Maidenhead locator
         (but not both), and/or a beam heading and ERP value.
 
-        Parse and decoded values are stored in the current object.
+        Parsed and decoded values are stored in the current object.
         """
 
         # Maidenhead locators, if present, must be first, and can be 4 or 6 characters.
@@ -121,7 +121,7 @@ class StatusPacket(GenericPacket):
             # Check for a timestamp
             if re.match("^[0-9]{6}z", self._info):
                 try:
-                    self.timestamp = APRSUtils.decode_timestamp(self._info[0:7])
+                    self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(self._info[0:7])
                     # TODO Sanity check the timestamp type - status reports can only use zulu
                     # or local, so if hms is used, throw an error.
                     # if timestamp_type == 'h' and data_type_id == '>':

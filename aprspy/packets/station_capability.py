@@ -24,7 +24,7 @@ class StationCapabilityPacket(GenericPacket):
         self._maidenhead_locator = None
         self.capabilities = []
 
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         """ TODO """
         capabilities = self._info.split(",")
 

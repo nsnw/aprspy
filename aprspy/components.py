@@ -63,7 +63,6 @@ class Station:
     @callsign.setter
     def callsign(self, value: str):
         """Set the callsign of the station (with or without an SSID)"""
-        logger.debug(value)
         # Ensure we're being given a str
         if type(value) is not str:
             raise TypeError("Callsign must be of type 'str' ({} given)".format(type(value)))
