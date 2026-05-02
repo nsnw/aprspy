@@ -24,6 +24,7 @@ from .packets.station_capability import StationCapabilityPacket
 from .packets.user_defined import UserDefinedPacket
 from .packets.item_report import ItemReportPacket
 from .packets.nmea import NMEAPacket
+from .packets.weather import WeatherPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -342,9 +343,8 @@ class APRS:
 
         # Check if the data type ID indicates a positionless weather report packet.
         elif cls.is_positionless_weather_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '_' (Positionless Weather Report)"
-            )
+            logger.debug("Packet is a positionless weather report packet")
+            packet_type = WeatherPacket
 
         # Check if the data type ID indicates a complete weather report packet.
         elif cls.is_complete_weather_report_data_type_id(data_type_id):

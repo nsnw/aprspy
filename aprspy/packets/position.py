@@ -469,6 +469,7 @@ class PositionPacket(GenericPacket):
             self.strength, self.height, self.gain, self.directivity = APRSUtils.decode_dfs(dfs)
 
         self.comment = comment
+        self._decode_weather_if_present()
 
     def _parse_compressed(self, data: str):
         try:
@@ -483,3 +484,14 @@ class PositionPacket(GenericPacket):
         self.symbol_id = data[9]
         self.ambiguity = 0
         self.comment = data[13:] if len(data) > 13 else None
+        self._decode_weather_if_present()
+
+    def _decode_weather_if_present(self):
+        """If the symbol indicates a weather station, parse weather fields from comment."""
+        if self.symbol_id != '_' or not self.comment:
+            return
+        # Lazy import to avoid circular dependency (weather.py extends PositionPacket)
+        from .weather import parse_weather_data
+        fields = parse_weather_data(self.comment)
+        for key, val in fields.items():
+            setattr(self, key, val)
