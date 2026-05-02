@@ -251,6 +251,10 @@ class MICEPacket(PositionPacket):
 
         return (speed, course)
 
+    @property
+    def message_bits(self) -> dict | None:
+        return getattr(self, '_message_bits', None)
+
     def parse(self) -> bool:
         """
         Parse a Mic-E packet.
@@ -261,7 +265,14 @@ class MICEPacket(PositionPacket):
         # Decode the latitude, ambiguity, the longitude offset, the east/west direction and the
         # message bits
         (self.latitude, self.ambiguity, lng_offset, east_west, message_a, message_b, message_c,
-         message_custom) = self._decode_latitude(self.destination)
+         message_custom) = self._decode_latitude(str(self.destination))
+
+        self._message_bits = {
+            "a": message_a,
+            "b": message_b,
+            "c": message_c,
+            "custom": message_custom,
+        }
 
         # Decode the longitude, using the longitude offset and east/west direction from the previous
         # step

@@ -431,12 +431,26 @@ class APRS:
             info=info
         )
 
+        # For X1J-style offset packets, get_packet_type rewrites info and data_type_id locally
+        # but doesn't return them. Replicate that here so the packet is constructed correctly.
+        # Guard with is_position_data_type_id to avoid misidentifying compressed packets whose
+        # base-91 encoded data happens to contain '!'.
+        if (packet_type is PositionPacket
+                and not cls.is_position_data_type_id(data_type_id)
+                and cls.is_position_info_with_offset(info)):
+            info = data_type_id + info
+            data_type_id = '!'
+
         # Set the source, destination, path and information fields, along with the checksum, data
         # type ID and the raw packet
-        return packet_type(
+        packet = packet_type(
             source=source,
             destination=destination,
             path=path,
             data_type_id=data_type_id,
             info=info
         )
+
+        packet.parse()
+
+        return packet
