@@ -23,6 +23,7 @@ from .packets.telemetry_definition import TelemetryParameterNamePacket, Telemetr
 from .packets.station_capability import StationCapabilityPacket
 from .packets.user_defined import UserDefinedPacket
 from .packets.item_report import ItemReportPacket
+from .packets.nmea import NMEAPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -336,9 +337,8 @@ class APRS:
         # Unsupported packet types.
         # Check if the data type ID indicates a raw NMEA position report packet.
         elif cls.is_raw_nmea_position_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '$' (Raw NMEA Position Report)"
-            )
+            logger.debug("Packet is a raw NMEA position report packet")
+            packet_type = NMEAPacket
 
         # Check if the data type ID indicates a positionless weather report packet.
         elif cls.is_positionless_weather_report_data_type_id(data_type_id):
