@@ -27,6 +27,7 @@ from .packets.nmea import NMEAPacket
 from .packets.weather import WeatherPacket
 from .packets.third_party import ThirdPartyPacket
 from .packets.query import QueryPacket
+from .packets.ultimeter import UltimeterPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -358,11 +359,11 @@ class APRS:
             logger.debug("Packet is a general query packet")
             packet_type = QueryPacket
 
-        # Check if the data type ID indicates a complete weather report packet.
-        elif cls.is_complete_weather_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '*' (Complete Weather Report)"
-            )
+        # Check if the data type ID indicates a Peet Bros Ultimeter II packet.
+        # '*' = MPH variant, '#' = KPH variant (distinction uncertain per APRS spec).
+        elif data_type_id in ('*', '#'):
+            logger.debug("Packet is a Peet Bros Ultimeter II weather packet")
+            packet_type = UltimeterPacket
 
         # As per APRS 1.01 C5 P18, position-without-timestamp packets may have the '!' located
         # anywhere up to the 40th character in the information field. If we're here, test for
