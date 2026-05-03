@@ -219,7 +219,7 @@ class APRS:
         """
         Check if the packet is a telemetry parameter name packet.
         """
-        if re.match(r'::[A-Za-z0-9\-]+\s?:PARM\.', packet):
+        if re.search(r'::[A-Za-z0-9\-]+\s*:PARM\.', packet):
             return True
 
         return False
@@ -229,7 +229,7 @@ class APRS:
         """
         Check if the packet is a telemetry unit label packet.
         """
-        if re.match(r'::[A-Za-z0-9\-]+\s?:UNIT\.', packet):
+        if re.search(r'::[A-Za-z0-9\-]+\s*:UNIT\.', packet):
             return True
 
         return False
@@ -239,7 +239,7 @@ class APRS:
         """
         Check if the packet is a telemetry equation coefficients packet.
         """
-        if re.match(r'::[A-Za-z0-9\-]+\s?:EQNS\.', packet):
+        if re.search(r'::[A-Za-z0-9\-]+\s*:EQNS\.', packet):
             return True
 
         return False
@@ -249,7 +249,7 @@ class APRS:
         """
         Check if the packet is a telemetry bit sense project name packet.
         """
-        if re.match(r'::[A-Za-z0-9\-]+\s?:BITS\.', packet):
+        if re.search(r'::[A-Za-z0-9\-]+\s*:BITS\.', packet):
             return True
 
         return False
@@ -306,7 +306,24 @@ class APRS:
             logger.debug("Packet is an item report packet")
             packet_type = ItemReportPacket
 
-        # Check if the data type ID indicates a message packet.
+        # Check if the data type ID indicates a message packet — but first check if it's
+        # actually a telemetry definition packet (PARM/UNIT/EQNS/BITS), which also uses ':' DTI.
+        elif cls.is_telemetry_parameter_name_packet(packet):
+            logger.debug("Packet is a telemetry parameter name packet")
+            packet_type = TelemetryParameterNamePacket
+
+        elif cls.is_telemetry_unit_label_packet(packet):
+            logger.debug("Packet is a telemetry unit label packet")
+            packet_type = TelemetryUnitLabelPacket
+
+        elif cls.is_telemetry_equation_coefficients_packet(packet):
+            logger.debug("Packet is a telemetry equation coefficients packet")
+            packet_type = TelemetryEquationCoefficientsPacket
+
+        elif cls.is_telemetry_bit_sense_project_name_packet(packet):
+            logger.debug("Packet is a telemetry bit sense project name packet")
+            packet_type = TelemetryBitSenseProjectNamePacket
+
         elif cls.is_message_data_type_id(data_type_id):
             logger.debug("Packet is a message packet")
             packet_type = MessagePacket
@@ -315,7 +332,7 @@ class APRS:
         # In addiition, the first character of the information field should be a '#'.
         # This _should_ be the only packet type that uses A-z for the data type ID,
         # which can clash with X1J-style position packets.
-        elif cls.is_telemetry_data_type_id(data_type_id) and info[1] == "#":
+        elif cls.is_telemetry_data_type_id(data_type_id) and info[0] == "#":
             logger.debug("Packet is a telemetry packet")
             packet_type = TelemetryPacket
 
@@ -381,27 +398,6 @@ class APRS:
 
             # Set the data type ID
             data_type_id = '!'
-
-        # Some packet types can only be determined based on the contents of the information field.
-        # Check if the packet contains the string "PARM".
-        elif cls.is_telemetry_parameter_name_packet(packet):
-            logger.debug("Packet is a telemetry parameter name packet")
-            packet_type = TelemetryParameterNamePacket
-
-        # Check if the packet contains the string "UNIT".
-        elif cls.is_telemetry_unit_label_packet(packet):
-            logger.debug("Packet is a telemetry unit label packet")
-            packet_type = TelemetryUnitLabelPacket
-
-        # Check if the packet contains the string "EQNS".
-        elif cls.is_telemetry_equation_coefficients_packet(packet):
-            logger.debug("Packet is a telemetry equation coefficients packet")
-            packet_type = TelemetryEquationCoefficientsPacket
-
-        # Check if the packet contains the string "BITS".
-        elif cls.is_telemetry_bit_sense_project_name_packet(packet):
-            logger.debug("Packet is a telemetry bit sense project name packet")
-            packet_type = TelemetryBitSenseProjectNamePacket
 
         # The end of the road. Anything still unmatched is unsupported (at the moment).
         # This is mostly packet types that do not conform to the APRS spec.

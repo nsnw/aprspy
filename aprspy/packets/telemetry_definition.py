@@ -73,7 +73,7 @@ class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
 
 
 class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
         try:
             if self._info[9] != ":":
@@ -106,7 +106,7 @@ class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
 
 
 class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
         try:
             if self._info[9] != ":":
@@ -146,7 +146,7 @@ class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
 
 
 class TelemetryBitSenseProjectNamePacket(TelemetryDefinitionPacket):
-    def _parse(self) -> bool:
+    def parse(self) -> bool:
         # If this is a message, then ':" MUST be in the 9th position (C14 P71)
         try:
             if self._info[9] != ":":
@@ -158,17 +158,13 @@ class TelemetryBitSenseProjectNamePacket(TelemetryDefinitionPacket):
         except IndexError:
             raise ParseError("Invalid telemetry definition packet (packet is too short)")
 
-        # Get the values, ignoring the addressee portion. As per the spec (C13 P68) "The
-        # message addressee is the callsign of the of the station transmitting the telemetry data".
-        # We can also ignore the next 5 characters as they contain the definition type
-        values = self._info[15:].split(",")
-
-        # Fields
-        fields = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'project_title']
-
-        field_number = 0
-        for value in values:
-            setattr(self, fields[field_number], value)
-            field_number += 1
+        # Format: BITS.b1b2b3b4b5b6b7b8,project_title
+        # The 8 bit-sense values are a single concatenated string; project title is optional.
+        remainder = self._info[15:]
+        parts = remainder.split(",", 1)
+        bit_string = parts[0]
+        for i, field in enumerate(['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']):
+            setattr(self, field, bit_string[i] if i < len(bit_string) else None)
+        self.project_title = parts[1] if len(parts) > 1 else None
 
         return True

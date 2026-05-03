@@ -273,7 +273,8 @@ class MessagePacket(GenericPacket):
 
     @property
     def info(self) -> str:
-        """Generate the information field for a message packet."""
+        """Generate the information field for a message packet (used for packet generation).
+        Raw parsed info is stored in _info and accessed directly by parse()."""
         info = ""
         if self.addressee:
             info += self.addressee.ljust(9)
@@ -295,6 +296,10 @@ class MessagePacket(GenericPacket):
             info += "{" + self.message_id
 
         return info
+
+    @info.setter
+    def info(self, value: str):
+        self._info = value
 
     def __repr__(self):
         if self.source:
