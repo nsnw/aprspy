@@ -26,6 +26,7 @@ from .packets.item_report import ItemReportPacket
 from .packets.nmea import NMEAPacket
 from .packets.weather import WeatherPacket
 from .packets.third_party import ThirdPartyPacket
+from .packets.query import QueryPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -351,6 +352,11 @@ class APRS:
         elif data_type_id == "}":
             logger.debug("Packet is a third-party traffic packet")
             packet_type = ThirdPartyPacket
+
+        # Check if the data type ID indicates a general query packet.
+        elif data_type_id == "?":
+            logger.debug("Packet is a general query packet")
+            packet_type = QueryPacket
 
         # Check if the data type ID indicates a complete weather report packet.
         elif cls.is_complete_weather_report_data_type_id(data_type_id):
