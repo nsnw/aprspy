@@ -25,6 +25,7 @@ from .packets.user_defined import UserDefinedPacket
 from .packets.item_report import ItemReportPacket
 from .packets.nmea import NMEAPacket
 from .packets.weather import WeatherPacket
+from .packets.third_party import ThirdPartyPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -345,6 +346,11 @@ class APRS:
         elif cls.is_positionless_weather_report_data_type_id(data_type_id):
             logger.debug("Packet is a positionless weather report packet")
             packet_type = WeatherPacket
+
+        # Check if the data type ID indicates a third-party traffic packet.
+        elif data_type_id == "}":
+            logger.debug("Packet is a third-party traffic packet")
+            packet_type = ThirdPartyPacket
 
         # Check if the data type ID indicates a complete weather report packet.
         elif cls.is_complete_weather_report_data_type_id(data_type_id):
