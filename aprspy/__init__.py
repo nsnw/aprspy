@@ -23,6 +23,11 @@ from .packets.telemetry_definition import TelemetryParameterNamePacket, Telemetr
 from .packets.station_capability import StationCapabilityPacket
 from .packets.user_defined import UserDefinedPacket
 from .packets.item_report import ItemReportPacket
+from .packets.nmea import NMEAPacket
+from .packets.weather import WeatherPacket
+from .packets.third_party import ThirdPartyPacket
+from .packets.query import QueryPacket
+from .packets.ultimeter import UltimeterPacket
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -336,21 +341,29 @@ class APRS:
         # Unsupported packet types.
         # Check if the data type ID indicates a raw NMEA position report packet.
         elif cls.is_raw_nmea_position_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '$' (Raw NMEA Position Report)"
-            )
+            logger.debug("Packet is a raw NMEA position report packet")
+            packet_type = NMEAPacket
 
         # Check if the data type ID indicates a positionless weather report packet.
         elif cls.is_positionless_weather_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '_' (Positionless Weather Report)"
-            )
+            logger.debug("Packet is a positionless weather report packet")
+            packet_type = WeatherPacket
 
-        # Check if the data type ID indicates a complete weather report packet.
-        elif cls.is_complete_weather_report_data_type_id(data_type_id):
-            raise UnsupportedError(
-                "Unsupported data type: '*' (Complete Weather Report)"
-            )
+        # Check if the data type ID indicates a third-party traffic packet.
+        elif data_type_id == "}":
+            logger.debug("Packet is a third-party traffic packet")
+            packet_type = ThirdPartyPacket
+
+        # Check if the data type ID indicates a general query packet.
+        elif data_type_id == "?":
+            logger.debug("Packet is a general query packet")
+            packet_type = QueryPacket
+
+        # Check if the data type ID indicates a Peet Bros Ultimeter II packet.
+        # '*' = MPH variant, '#' = KPH variant (distinction uncertain per APRS spec).
+        elif data_type_id in ('*', '#'):
+            logger.debug("Packet is a Peet Bros Ultimeter II weather packet")
+            packet_type = UltimeterPacket
 
         # As per APRS 1.01 C5 P18, position-without-timestamp packets may have the '!' located
         # anywhere up to the 40th character in the information field. If we're here, test for

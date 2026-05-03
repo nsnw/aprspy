@@ -662,6 +662,18 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pynmea2"
+version = "1.19.0"
+description = "Python library for the NMEA 0183 protcol"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pynmea2-1.19.0-py3-none-any.whl", hash = "sha256:5138558b4fb5daa587b2c17de99eb43df0297039de1c98010c996624abfb00eb"},
+    {file = "pynmea2-1.19.0.tar.gz", hash = "sha256:1daa79b93279f887d1c235e5cc5c79e32644564138ce46989ab0f4a2fc970d7c"},
+]
+
+[[package]]
 name = "pytest"
 version = "8.3.4"
 description = "pytest: simple powerful testing with Python"
@@ -987,4 +999,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "9e3ec761fccc1e134172145b23e85879aa2f6cd341a5c0f48fc4edc7f66a28d1"
+content-hash = "27da98d78c216c52092429dfac67db2f5f8cd0be204a8115b3832139799cf60f"
