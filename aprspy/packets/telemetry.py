@@ -188,12 +188,12 @@ class TelemetryPacket(GenericPacket):
             # We didn't get any matches
             raise ParseError("Failed to parse telemetry packet.")
 
-        try:
-            (self.av1, self.av2, self.av3, self.av4, self.av5, remainder) = values.split(",", 5)
-
-        except ValueError as e:
-            # Failed to parse values
-            raise ParseError("Failed to parse analog values: {}".format(e))
+        # Split analog values; the spec requires 5 but many senders omit trailing ones.
+        # Pad missing slots with '' so TelemetryAnalogValue stores them as None.
+        parts = values.split(",", 5)
+        while len(parts) < 6:
+            parts.append('')
+        self.av1, self.av2, self.av3, self.av4, self.av5, remainder = parts
 
         # A comment, if it exists, is sometimes separated from the values by a space, and sometimes
         # by a comma. Complicating things further, sometimes the digital values aren't 8 characters
