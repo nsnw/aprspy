@@ -67,7 +67,7 @@ class Station:
         if type(value) is not str:
             raise TypeError("Callsign must be of type 'str' ({} given)".format(type(value)))
 
-        callsign_ssid_regex = '^[A-Za-z0-9]+-[A-Za-z0-9]{1,2}$'
+        callsign_ssid_regex = '^[A-Za-z0-9]+-[A-Za-z0-9]{1,6}$'
         callsign_only_regex = '^[A-Za-z0-9]+$'
 
         if re.match(callsign_ssid_regex, value):
@@ -95,10 +95,10 @@ class Station:
 
         # Ensure we're being given a str or an int
         elif type(value) is str:
-            if re.match(r'^[A-Za-z0-9]{1,2}$', value):
+            if re.match(r'^[A-Za-z0-9]{1,6}$', value):
                 # Valid SSID
-                if re.match(r'^[0-9]{1,2}', value):
-                    # Can we convert it to an int?
+                if re.match(r'^[0-9]{1,2}$', value):
+                    # Purely numeric — try to store as int (AX.25 style)
                     try:
                         if int(value) == 0:
                             self._ssid = None
@@ -108,7 +108,6 @@ class Station:
                             self._ssid = value
 
                     except ValueError:
-                        # Not an integer
                         self._ssid = value
                 else:
                     self._ssid = value

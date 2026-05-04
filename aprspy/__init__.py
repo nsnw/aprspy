@@ -75,7 +75,7 @@ class APRS:
             else:
                 raise ParseError(f"Invalid source callsign: {source}")
         else:
-            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,3})?$', source):
+            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,6})?$', source):
                 return True
             else:
                 raise ParseError(f"Invalid source callsign: {source}")
@@ -97,7 +97,7 @@ class APRS:
             else:
                 raise ParseError(f"Invalid destination callsign or data: {destination}")
         else:
-            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,3})?$', destination):
+            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,6})?$', destination):
                 return True
             else:
                 raise ParseError(f"Invalid destination callsign or data: {destination}")
