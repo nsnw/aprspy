@@ -29,6 +29,8 @@ from .packets.third_party import ThirdPartyPacket
 from .packets.query import QueryPacket
 from .packets.ultimeter import UltimeterPacket
 
+__version__ = "0.5.0"
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
