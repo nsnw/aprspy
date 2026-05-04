@@ -42,38 +42,54 @@ class ObjectPacket(PositionPacket):
         if not self._info:
             return True
 
-        if len(self._info) < 17:
-            raise ParseError("Object packet too short", self)
+        # Locate the live/killed indicator ('*' or '_'). The spec requires a
+        # 9-char space-padded name, but many senders omit the padding, so we
+        # scan up to position 9 inclusive to find the indicator.
+        indicator_idx = next(
+            (i for i in range(min(10, len(self._info))) if self._info[i] in ('*', '_')),
+            None
+        )
 
-        # First 9 characters are the object name, space-padded
-        self.object_name = self._info[0:9].rstrip()
+        if indicator_idx is None:
+            raise ParseError("No live/killed indicator found in object packet", self)
 
-        # Character 10 is the live/killed indicator
-        live_killed = self._info[9]
-        if live_killed == '*':
-            self.alive = True
-        elif live_killed == '_':
-            self.alive = False
-        else:
-            raise ParseError(f"Invalid live/killed indicator: {live_killed!r}", self)
-
+        self.object_name = self._info[:indicator_idx].rstrip()
+        self.alive = self._info[indicator_idx] == '*'
         logger.debug(f"Object name: {self.object_name!r}, alive: {self.alive}")
 
-        # Characters 11-17 are the timestamp (7 chars)
+        # 7-char timestamp immediately follows the indicator
+        ts_start = indicator_idx + 1
+        ts_end = ts_start + 7
+
+        if len(self._info) < ts_end:
+            raise ParseError("Object packet too short", self)
+
         try:
-            self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(self._info[10:17])
-        except ParseError:
-            raise ParseError("Invalid timestamp in object packet", self)
+            self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(
+                self._info[ts_start:ts_end]
+            )
+        except ParseError as e:
+            # Bad/placeholder timestamps (e.g. 111111z, 043516z with hour>23) are
+            # common in the wild. Store None and continue to parse the position.
+            logger.debug(f"Invalid timestamp in object packet, ignoring: {e}")
+            self.timestamp = None
+            self.timestamp_type = None
 
         logger.debug(f"Timestamp: {self.timestamp}")
 
-        # Remaining data is the position
-        data = self._info[17:]
+        data = self._info[ts_end:]
+        if not data:
+            return True
 
         if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
             self._parse_uncompressed(data)
         else:
-            self._parse_compressed(data)
+            try:
+                self._parse_compressed(data)
+            except ParseError:
+                # Non-position body (e.g. embedded telemetry T#...). Store raw.
+                logger.debug(f"Couldn't parse object body as position, storing as comment")
+                self.comment = data
 
         return True
 
