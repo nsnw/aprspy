@@ -428,26 +428,40 @@ class PositionPacket(GenericPacket):
 
         data = self._info
 
-        if self.data_type_id == '!' and self._info and not (
-            self._info[0].isdigit() or self._info[0] == ' '
-        ):
-            # X1J-style: '!' data_type_id but info starts with a non-position header
-            excl_idx = self._info.find('!', 0, 40)
-            data = self._info[excl_idx + 1:]
-
-        elif self.data_type_id in ['@', '/']:
+        if self.data_type_id in ['@', '/']:
             if len(data) < 7:
                 raise ParseError("Missing timestamp in position packet", self)
             self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7])
             data = data[7:]
 
-        # Determine compressed vs uncompressed
+        self._parse_position_data(data)
+        return True
+
+    def _parse_position_data(self, data: str):
+        """Parse position data as uncompressed, compressed, or X1J-offset fallback."""
         if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
             self._parse_uncompressed(data)
-        else:
-            self._parse_compressed(data)
+            return
 
-        return True
+        try:
+            self._parse_compressed(data)
+            return
+        except ParseError:
+            pass
+
+        # X1J-style fallback: some TNC firmware (e.g. Kenwood X1J) prepends a header
+        # before the actual position, delimited by '!'. Only try this for '!' DTI.
+        if self.data_type_id == '!':
+            excl_idx = self._info.find('!', 1, 40)
+            if excl_idx > 0:
+                x1j_data = self._info[excl_idx + 1:]
+                if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', x1j_data):
+                    self._parse_uncompressed(x1j_data)
+                    return
+                self._parse_compressed(x1j_data)
+                return
+
+        raise ParseError("Couldn't parse position data", self)
 
     def _parse_uncompressed(self, data: str):
         (self.latitude, self.longitude, self.ambiguity,

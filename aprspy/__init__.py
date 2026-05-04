@@ -405,12 +405,8 @@ class APRS:
             # Set the data type ID
             data_type_id = '!'
 
-        # The end of the road. Anything still unmatched is unsupported (at the moment).
-        # This is mostly packet types that do not conform to the APRS spec.
-        else:
-            raise ParseError(
-                "Could not determine packet type"
-            )
+        # Unrecognised DTI — fall through to GenericPacket so the raw data is still accessible.
+        # Many real-world APRS-IS packets use informal or application-specific info fields.
 
         return packet_type
 
