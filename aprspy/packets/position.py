@@ -431,8 +431,25 @@ class PositionPacket(GenericPacket):
         if self.data_type_id in ['@', '/']:
             if len(data) < 7:
                 raise ParseError("Missing timestamp in position packet", self)
-            self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7])
-            data = data[7:]
+            try:
+                self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7])
+                data = data[7:]
+            except ParseError:
+                # Invalid or placeholder timestamp (e.g. '<data>z', '......z', or omitted
+                # entirely). Try full data first (handles no-timestamp '/' packets), then
+                # skip 7 chars (handles fixed-width placeholders like '<data>z').
+                self.timestamp = None
+                self.timestamp_type = None
+                logger.debug(f"Unrecognised timestamp {data[0:7]!r}, attempting position recovery")
+                for candidate in (data, data[7:] if len(data) > 7 else None):
+                    if candidate is None:
+                        continue
+                    try:
+                        self._parse_position_data(candidate)
+                        return True
+                    except ParseError:
+                        continue
+                raise ParseError("No valid timestamp or position data found", self)
 
         self._parse_position_data(data)
         return True

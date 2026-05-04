@@ -249,8 +249,9 @@ def test_position_with_dfs():
 
 
 def test_position_with_missing_timestamp():
-    with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,FOURTH:@5030.50S/10020.30E$221/000/A=005000Test packet')
+    p = APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,FOURTH:@5030.50S/10020.30E$221/000/A=005000Test packet')
+    assert p.timestamp is None
+    assert p.latitude is not None
 
 
 def test_parse_data_with_phg():
