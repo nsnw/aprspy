@@ -139,10 +139,12 @@ def test_invalid_mh6_status_message_missing_initial_space():
 
 
 def test_invalid_mh4_status_message_missing_initial_space():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(
-            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-Test status with 4 digit Maidenhead locator'
-        )
+    # Missing space means it's not a valid Maidenhead status — falls through to plain text
+    p = APRS.parse_packet(
+        r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-Test status with 4 digit Maidenhead locator'
+    )
+    assert p.maidenhead_locator is None
+    assert p.status_message == 'DO21/-Test status with 4 digit Maidenhead locator'
 
 
 def test_empty_info():

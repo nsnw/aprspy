@@ -98,27 +98,22 @@ class StatusPacket(GenericPacket):
                 logger.debug("No status message")
 
         elif mh_4 is not None and re.match(r'[A-Z]{2}[0-9]{2}[/\\\0-9A-Z].', mh_4):
-            # Maidenhead locator (GGnn)
-            self.maidenhead_locator = mh_4[0:4]
-
-            self.symbol_table = mh_4[4]
-            self.symbol_id = mh_4[5]
-
-            logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
-                self.maidenhead_locator, self.symbol_table, self.symbol_id
-            ))
-
-            if len(self._info) != 6:
-
-                # First character of the text must be " " (C16 P82)
-                if self._info[6] != " ":
-                    # TODO
-                    raise ParseError("Status message is invalid", self)
-                else:
-                    self.status_message = self._info[7:]
-                    logger.debug("Status message is {}".format(self.status_message))
+            # Maidenhead locator (GGnn) — only commit if followed by end or a space.
+            # Free-form status text can collide with this pattern (e.g. "FM439.1625 T67"
+            # looks like locator FM43 + overlay 9 + symbol .) so we fall through to plain
+            # status when the mandatory space is absent.
+            if len(self._info) == 6 or self._info[6] == " ":
+                self.maidenhead_locator = mh_4[0:4]
+                self.symbol_table = mh_4[4]
+                self.symbol_id = mh_4[5]
+                logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
+                    self.maidenhead_locator, self.symbol_table, self.symbol_id
+                ))
+                self.status_message = self._info[7:] if len(self._info) > 6 else None
+                logger.debug("Status message is {}".format(self.status_message))
             else:
-                logger.debug("No status message")
+                self.status_message = self._info
+                logger.debug("No valid Maidenhead format, treating as plain status")
 
         else:
             # Check for a timestamp
