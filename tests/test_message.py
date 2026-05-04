@@ -191,8 +191,10 @@ def test_group_bulletin_packet():
 # --- Error cases ---
 
 def test_invalid_addressee_field_size():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9 :This is a test message{001')
+    # Under-padded addressee (8 chars instead of 9) is now accepted leniently
+    p = APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9 :This is a test message{001')
+    assert p.addressee == 'YY9YY-9'
+    assert p.message == 'This is a test message'
 
 
 def test_message_invalid_message_id():
@@ -201,8 +203,9 @@ def test_message_invalid_message_id():
 
 
 def test_invalid_announcement_id():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLNAA    :This is a test bulletin')
+    # Non-standard announcement IDs (e.g. BLNALUX used by some regional nets) are now accepted
+    p = APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLNAA    :This is a test bulletin')
+    assert p.announcement_id == 'A'
 
 
 def test_invalid_bulletin():

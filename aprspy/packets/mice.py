@@ -123,7 +123,7 @@ class MICEPacket(PositionPacket):
                     east_west = "W"
 
         # TODO
-        if len(destination) > 6:
+        if len(destination) > 6 and '-' in destination:
             logger.debug("Mic-E destination has SSID: {}".format(destination.split('-')[1]))
 
         # Now that we have an uncompressed latitude, we can decode it like a standard uncompressed

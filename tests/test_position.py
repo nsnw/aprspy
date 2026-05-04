@@ -93,8 +93,11 @@ def test_parse_uncompressed_position():
 
 
 def test_parse_invalid_uncompressed_position():
-    with pytest.raises(ParseError):
-        PositionPacket._parse_uncompressed_position("5100.00N/11400.00W")
+    # Missing symbol code is now accepted leniently (symbol_id = None)
+    lat, lng, amb, st, sid = PositionPacket._parse_uncompressed_position("5100.00N/11400.00W")
+    assert lat == 51
+    assert lng == -114
+    assert sid is None
 
 
 def test_parse_compressed_position_with_altitude():

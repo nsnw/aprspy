@@ -117,7 +117,7 @@ class APRS:
         """
         try:
             (source, destination, path, data_type_id, info) = re.match(
-                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+),([A-Za-z0-9\-*,]+):(.)(.*)',
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+),([A-Za-z0-9\-*,]+):(.?)(.*)',
                 packet
             ).groups()
 
@@ -286,6 +286,10 @@ class APRS:
         # This is used for position packets where the data is offset.
         offset = None
 
+        # Packets with no info field at all (nothing after ':') are generic.
+        if not data_type_id:
+            return packet_type
+
         # First, check if the destination is one of the common beacon addresses.
         # If it is, we can be fairly certain that this is a beacon packet.
         if cls.is_beacon_destination(destination):
@@ -338,7 +342,7 @@ class APRS:
         # In addiition, the first character of the information field should be a '#'.
         # This _should_ be the only packet type that uses A-z for the data type ID,
         # which can clash with X1J-style position packets.
-        elif cls.is_telemetry_data_type_id(data_type_id) and info[0] == "#":
+        elif cls.is_telemetry_data_type_id(data_type_id) and info[:1] == "#":
             logger.debug("Packet is a telemetry packet")
             packet_type = TelemetryPacket
 

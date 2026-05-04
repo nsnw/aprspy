@@ -193,18 +193,16 @@ class MessagePacket(GenericPacket):
         The parsed values are stored within the current object.
         """
 
-        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        try:
-            if self._info[9] != ":":
-                raise ParseError("Invalid message packet (missing : in 9th position)", self)
-
-        except IndexError:
-            raise ParseError("Invalid message packet (packet is too short)")
+        # The spec requires ':' at position 9 (9-char addressee), but real-world senders sometimes
+        # omit the space padding. Accept ':' anywhere in positions 1–10.
+        sep = self._info.find(':')
+        if sep < 1 or sep > 10:
+            raise ParseError("Invalid message packet (missing : in 9th position)", self)
 
         # Split the message into the addressee and the actual message
-        addressee = self._info[0:9]
+        addressee = self._info[:sep]
         self.addressee = addressee.rstrip()
-        message = self._info[10:]
+        message = self._info[sep + 1:]
 
         logger.debug("Message is addressed to {}, message is {}".format(addressee, message))
 
@@ -230,15 +228,15 @@ class MessagePacket(GenericPacket):
 
             elif re.match("[A-Z]", addressee[3]):
                 # Announcements have the format BLNa, where a is a character between A and Z
-                if addressee[4:9] == "     ":
-                    # Announcement
+                if addressee[4:].rstrip() == "":
+                    # Standard announcement
                     self.announcement_id = addressee[3]
                     logger.debug("Announcement {}".format(self.announcement_id))
                 else:
-                    # Incorrectly-formatted bulletin
-                    raise ParseError(
-                        "Incorrectly-formatted announcement: {}".format(addressee), self
-                    )
+                    # Non-standard: extra chars after the single-letter announcement ID (e.g.
+                    # BLNALUX). Treat as announcement, ignore the extra identifier.
+                    self.announcement_id = addressee[3]
+                    logger.debug("Non-standard announcement: {}".format(addressee))
 
             else:
                 # Incorrectly-formatted bulletin

@@ -290,7 +290,8 @@ class PositionPacket(GenericPacket):
             symbol_id = data[18]
             logger.debug("Symbol: {}".format(symbol_id))
         except IndexError:
-            raise ParseError("Missing symbol identifier")
+            symbol_id = None
+            logger.debug("Symbol identifier missing (truncated packet)")
 
         return (lat, lng, ambiguity, symbol_table, symbol_id)
 

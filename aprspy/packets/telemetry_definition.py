@@ -32,6 +32,17 @@ class TelemetryDefinitionPacket(GenericPacket):
         # Set the data type ID
         self.data_type_id = ":"
 
+    def _find_sep(self) -> int:
+        """Return the index of the ':' that separates addressee from content.
+
+        The spec mandates 9-char padding, but real senders omit it. Accept ':' anywhere in
+        positions 1–10.
+        """
+        sep = self._info.find(':')
+        if sep < 1 or sep > 10:
+            raise ParseError("Invalid telemetry definition packet (missing : in 9th position)", self)
+        return sep
+
     def _parse(self) -> bool:
         pass
 
@@ -44,51 +55,28 @@ class TelemetryDefinitionPacket(GenericPacket):
 
 class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
     def parse(self) -> bool:
-        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        try:
-            if self._info[9] != ":":
-                raise ParseError(
-                    "Invalid telemetry definition packet (missing : in 9th position)",
-                    self
-                )
-
-        except IndexError:
-            raise ParseError("Invalid telemetry definition packet (packet is too short)")
-
-        # Get the values, ignoring the addressee portion. As per the spec (C13 P68) "The
-        # message addressee is the callsign of the of the station transmitting the telemetry data".
-        # We can also ignore the next 5 characters as they contain the definition type
-        values = self._info[15:].split(",")
+        sep = self._find_sep()
+        # Skip addressee, ':', and the 5-char type prefix (e.g. "PARM.")
+        values = self._info[sep + 6:].split(",")
 
         # Fields
         fields = ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']
 
-        field_number = 0
-
-        for value in values:
-            setattr(self, fields[field_number], value)
-            field_number += 1
+        try:
+            field_number = 0
+            for value in values:
+                setattr(self, fields[field_number], value)
+                field_number += 1
+        except IndexError:
+            logger.warning("PARM packet has more fields than expected ({})".format(len(values)))
 
         return True
 
 
 class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
     def parse(self) -> bool:
-        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        try:
-            if self._info[9] != ":":
-                raise ParseError(
-                    "Invalid telemetry definition packet (missing : in 9th position)",
-                    self
-                )
-
-        except IndexError:
-            raise ParseError("Invalid telemetry definition packet (packet is too short)")
-
-        # Get the values, ignoring the addressee portion. As per the spec (C13 P68) "The
-        # message addressee is the callsign of the of the station transmitting the telemetry data".
-        # We can also ignore the next 5 characters as they contain the definition type
-        values = self._info[15:].split(",")
+        sep = self._find_sep()
+        values = self._info[sep + 6:].split(",")
 
         # Fields
         fields = ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']
@@ -107,21 +95,8 @@ class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
 
 class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
     def parse(self) -> bool:
-        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        try:
-            if self._info[9] != ":":
-                raise ParseError(
-                    "Invalid telemetry definition packet (missing : in 9th position)",
-                    self
-                )
-
-        except IndexError:
-            raise ParseError("Invalid telemetry definition packet (packet is too short)")
-
-        # Get the values, ignoring the addressee portion. As per the spec (C13 P68) "The
-        # message addressee is the callsign of the of the station transmitting the telemetry data".
-        # We can also ignore the next 5 characters as they contain the definition type
-        values = self._info[15:].split(",")
+        sep = self._find_sep()
+        values = self._info[sep + 6:].split(",")
 
         # Fields
         fields = [
@@ -147,20 +122,9 @@ class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
 
 class TelemetryBitSenseProjectNamePacket(TelemetryDefinitionPacket):
     def parse(self) -> bool:
-        # If this is a message, then ':" MUST be in the 9th position (C14 P71)
-        try:
-            if self._info[9] != ":":
-                raise ParseError(
-                    "Invalid telemetry definition packet (missing : in 9th position)",
-                    self
-                )
-
-        except IndexError:
-            raise ParseError("Invalid telemetry definition packet (packet is too short)")
-
+        sep = self._find_sep()
         # Format: BITS.b1b2b3b4b5b6b7b8,project_title
-        # The 8 bit-sense values are a single concatenated string; project title is optional.
-        remainder = self._info[15:]
+        remainder = self._info[sep + 6:]
         parts = remainder.split(",", 1)
         bit_string = parts[0]
         for i, field in enumerate(['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']):
