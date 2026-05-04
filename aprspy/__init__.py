@@ -56,47 +56,54 @@ class APRS:
             raise exception
 
     @classmethod
-    def validate_source(cls, source: str) -> bool:
+    def validate_source(cls, source: str, strict: bool = False) -> bool:
         """
-        Validate the source callsign, ensuring that it is no longer than 7 characters with an optional
-        SSID.
+        Validate the source callsign.
+
+        In strict mode, enforces the ham radio callsign format: uppercase alphanumeric, up to 6
+        characters, with an optional numeric SSID of 1-2 digits.
+
+        In lenient mode (default), accepts the wider variety of callsigns seen on APRS-IS in
+        practice: case-insensitive, up to 9 characters, with an optional alphanumeric SSID of
+        up to 3 characters (covering D-Star/YSF gateway suffixes like -B, -N, -R1, etc.).
         """
-        if re.match(r'^[A-Z0-9]{1,6}$', source):
-            # Match callsign without SSID, up to a maximum of 6 characters.
-            return True
-
-        elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', source):
-            # Match callsign with SSID, up to a maximum of 6 characters.
-            return True
-
+        if strict:
+            if re.match(r'^[A-Z0-9]{1,6}$', source):
+                return True
+            elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', source):
+                return True
+            else:
+                raise ParseError(f"Invalid source callsign: {source}")
         else:
-            # Not a valid source callsign.
-            raise ParseError(
-                f"Invalid source callsign: {source}"
-            )
+            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,3})?$', source):
+                return True
+            else:
+                raise ParseError(f"Invalid source callsign: {source}")
 
     @classmethod
-    def validate_destination(cls, destination: str) -> bool:
+    def validate_destination(cls, destination: str, strict: bool = False) -> bool:
         """
-        Validate the destination callsign, ensuring that it is no longer than 7 characters with an
-        optional SSID.
+        Validate the destination callsign or tocall.
+
+        In strict mode, enforces uppercase alphanumeric up to 6 characters with an optional
+        numeric SSID. In lenient mode (default), accepts the same relaxed format as
+        validate_source.
         """
-        if re.match(r'^[A-Z0-9]{1,6}$', destination):
-            # Match callsign or data without SSID, up to a maximum of 6 characters.
-            return True
-
-        elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', destination):
-            # Match callsign or data with SSID, up to a maximum of 6 characters.
-            return True
-
+        if strict:
+            if re.match(r'^[A-Z0-9]{1,6}$', destination):
+                return True
+            elif re.match(r'^[A-Z0-9]{1,6}-[0-9]{1,2}$', destination):
+                return True
+            else:
+                raise ParseError(f"Invalid destination callsign or data: {destination}")
         else:
-            # Not a valid source callsign.
-            raise ParseError(
-                f"Invalid destination callsign or data: {destination}"
-            )
+            if re.match(r'^[A-Za-z0-9]{1,9}(-[A-Za-z0-9]{1,3})?$', destination):
+                return True
+            else:
+                raise ParseError(f"Invalid destination callsign or data: {destination}")
 
     @classmethod
-    def parse_basic_data(cls, packet: str) -> tuple[str, str, str, str, str]:
+    def parse_basic_data(cls, packet: str, strict: bool = False) -> tuple[str, str, str, str, str]:
         """
         Parse the basic data from an APRS packet:-
 
@@ -117,9 +124,8 @@ class APRS:
         except AttributeError:
             raise ParseError("Could not parse packet details", packet)
 
-        # Validate the source and destination callsigns.
-        cls.validate_source(source)
-        cls.validate_destination(destination)
+        cls.validate_source(source, strict=strict)
+        cls.validate_destination(destination, strict=strict)
 
         return source, destination, path, data_type_id, info
 
@@ -409,13 +415,15 @@ class APRS:
         return packet_type
 
     @classmethod
-    def parse_packet(cls, packet: str) -> Packet | PositionPacket:
+    def parse_packet(cls, packet: str, strict: bool = False) -> Packet | PositionPacket:
         """
         Parse an APRS packet, and return an instance of a subclass of :class:`Packet` appropriate for the
         packet type.
 
         :param str packet: a raw packet
-        :param datetime timestamp: an (optional) timestamp indicating when the packet arrived
+        :param bool strict: if True, enforce strict ham-radio callsign format (uppercase,
+            max 6 chars, numeric SSID only). Defaults to False, which accepts the wider variety
+            of callsigns found on APRS-IS in practice.
 
         Given a raw packet, this function will return an object that is a subclass of
         :class:`Packet`.
@@ -424,7 +432,7 @@ class APRS:
 
         # Parse out the basic details of the packet.
         (source, destination, path, data_type_id, info) = cls.parse_basic_data(
-            packet=packet
+            packet=packet, strict=strict
         )
 
         # Create a checksum, to provide a quick comparison against other packets

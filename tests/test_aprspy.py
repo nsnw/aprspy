@@ -26,11 +26,11 @@ def test_validate_source_with_valid_sources(source):
     assert APRS.validate_source(source)
 
 
-# Test invalid source callsigns.
+# Test invalid source callsigns (strict mode).
 @pytest.mark.parametrize("source", INVALID_SOURCES)
 def test_validate_source_with_invalid_sources(source):
     with pytest.raises(ParseError):
-        APRS.validate_source(source)
+        APRS.validate_source(source, strict=True)
 
 
 # Test valid destination callsigns or data.
@@ -39,11 +39,11 @@ def test_validate_destination_with_valid_destinations(destination):
     assert APRS.validate_destination(destination)
 
 
-# Test invalid destination callsigns or data.
+# Test invalid destination callsigns or data (strict mode).
 @pytest.mark.parametrize("destination", INVALID_SOURCES)
 def test_validate_destination_with_invalid_destinations(destination):
     with pytest.raises(ParseError):
-        APRS.validate_destination(destination)
+        APRS.validate_destination(destination, strict=True)
 
 
 # Test parsing the basic details of a packet.
