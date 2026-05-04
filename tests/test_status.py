@@ -13,6 +13,7 @@ RAW_WITH_MH6_WITHOUT_STATUS = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-'
 RAW_WITH_MH4 = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/- Test status with 4 digit Maidenhead locator'
 RAW_WITH_MH4_WITHOUT_STATUS = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-'
 RAW_WITH_HDG_AND_PWR = r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>Test status with heading and power^B7'
+RAW_EMPTY_INFO = 'XX1XX-1>APRS,TCPIP*,qAC,TEST:>'
 
 
 @pytest.fixture
@@ -142,3 +143,9 @@ def test_invalid_mh4_status_message_missing_initial_space():
         APRS.parse_packet(
             r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21/-Test status with 4 digit Maidenhead locator'
         )
+
+
+def test_empty_info():
+    p = APRS.parse_packet(RAW_EMPTY_INFO)
+    assert type(p) == StatusPacket
+    assert p.status_message is None

@@ -61,6 +61,9 @@ class StatusPacket(GenericPacket):
         # Therefore, if the status report matches [A-Z]{2}[0-9]{2}([A-Z]{2})? and a valid symbol
         # table and id, then it's a Maidenhead locator.
         # Valid symbol table IDs: /, \, 0-9, A-Z (C20 P91)
+        if not self._info:
+            return True
+
         mh_4 = None
         mh_6 = None
 
