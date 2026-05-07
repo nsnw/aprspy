@@ -249,8 +249,10 @@ class MessagePacket(GenericPacket):
                 raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)
 
         if '{' in message:
-            # Check for a message ID
+            # Check for a message ID; some clients use {ID} with a } terminator
             message, message_id = message.split("{", maxsplit=1)
+            if '}' in message_id:
+                message_id = message_id[:message_id.index('}')]
             logger.debug("Message has message ID {}".format(message_id))
 
             # Message IDs must not be longer than 5 characters (C14 P71)
