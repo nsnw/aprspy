@@ -204,17 +204,12 @@ class PathHop:
                 try:
                     self._hop = QConstruct(value=value)
                 except (KeyError, ValueError):
-                    # Try normalising the third character's case (e.g. qAc → qAC)
-                    try:
-                        normalised = value[:2] + value[2:].swapcase()
-                        self._hop = QConstruct(value=normalised)
-                    except (KeyError, ValueError, IndexError):
-                        if self._warnings is not None:
-                            self._warnings.append(ParseWarning(
-                                code=ParseWarningCode.PATH_INVALID_Q_CONSTRUCT,
-                                message="Invalid q construct: {}".format(value)
-                            ))
-                        self._hop = value
+                    if self._warnings is not None:
+                        self._warnings.append(ParseWarning(
+                            code=ParseWarningCode.PATH_INVALID_Q_CONSTRUCT,
+                            message="Invalid q construct: {}".format(value)
+                        ))
+                    self._hop = value
 
             # Check for a trailing *
             elif value[-1] == "*":
