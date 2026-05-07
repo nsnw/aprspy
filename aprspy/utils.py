@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timedelta, UTC
 from typing import Union, Tuple, Optional
 from .exceptions import ParseError
-from .warnings import ParseWarning, ParseWarningCode
+from .warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -621,9 +621,10 @@ class APRSUtils:
                             _w = ParseWarning(
                                 code=ParseWarningCode.TIMESTAMP_FORMAT_FALLBACK,
                                 message="DDHHMM parse failed for '{}', interpreted as HHMMSS".format(
-                                    raw_timestamp)
+                                    raw_timestamp),
+                                severity=ParseWarningSeverity.INFO
                             )
-                            logger.warning(str(_w))
+                            logger.info(str(_w))
                             if _warnings is not None:
                                 _warnings.append(_w)
                             if ts > utc:
