@@ -45,9 +45,10 @@ class Packet:
         if info is not None:
             self.info = info
 
-    def _warn(self, code: ParseWarningCode, message: str) -> None:
+    def _warn(self, code: ParseWarningCode, message: str,
+              severity: ParseWarningSeverity = ParseWarningSeverity.WARNING) -> None:
         """Log a parse warning and record it on the packet."""
-        w = ParseWarning(code=code, message=message)
+        w = ParseWarning(code=code, message=message, severity=severity)
         logger.warning(str(w))
         self._parse_warnings.append(w)
 

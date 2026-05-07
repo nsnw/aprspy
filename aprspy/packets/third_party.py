@@ -3,6 +3,7 @@
 import logging
 
 from ..exceptions import ParseError
+from ..warnings import ParseWarningSeverity
 from .generic import GenericPacket
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,10 @@ class ThirdPartyPacket(GenericPacket):
             self.inner_packet = APRS.parse_packet(self._info)
         except Exception as e:
             raise ParseError(f"Could not parse inner packet in third-party traffic: {e}", self)
+
+        if any(w.severity == ParseWarningSeverity.DOWNGRADE
+               for w in self.inner_packet.parse_warnings):
+            raise ParseError("Could not parse inner packet in third-party traffic", self)
 
         return True
 

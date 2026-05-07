@@ -449,9 +449,32 @@ class APRS:
         logger.debug("Raw packet: {}".format(packet))
 
         # Parse out the basic details of the packet.
-        (source, destination, path, data_type_id, info) = cls.parse_basic_data(
-            packet=packet, strict=strict
-        )
+        try:
+            (source, destination, path, data_type_id, info) = cls.parse_basic_data(
+                packet=packet, strict=strict
+            )
+        except ParseError as e:
+            if strict:
+                raise
+            # Basic structure parsed but source/destination failed validation.
+            # Re-extract without validation so we can still return a GenericPacket.
+            m = re.match(
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+)(?:,([A-Za-z0-9\-*,]+))?:(.?)(.*)',
+                packet
+            )
+            fallback = GenericPacket()
+            if m:
+                fallback._source, fallback._destination, fallback._path, \
+                    _dti, _info = m.groups()
+                fallback._info = (_dti or '') + (_info or '')
+            _w = ParseWarning(
+                code=ParseWarningCode.PARSE_FAILED,
+                message=str(e),
+                severity=ParseWarningSeverity.DOWNGRADE
+            )
+            logger.warning(str(_w))
+            fallback._parse_warnings.append(_w)
+            return fallback
 
         # Create a checksum, to provide a quick comparison against other packets
         checksum = md5((source + info).encode()).hexdigest()

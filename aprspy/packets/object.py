@@ -44,11 +44,18 @@ class ObjectPacket(PositionPacket):
 
         # Locate the live/killed indicator ('*' or '_'). The spec requires a
         # 9-char space-padded name, but many senders omit the padding, so we
-        # scan up to position 9 inclusive to find the indicator.
-        indicator_idx = next(
-            (i for i in range(min(10, len(self._info))) if self._info[i] in ('*', '_')),
-            None
-        )
+        # scan up to position 9 inclusive. Prefer '*' over '_' because '_' may
+        # legitimately appear in object names.
+        search_range = self._info[:min(11, len(self._info))]
+        star_idx = search_range.find('*')
+        kill_idx = search_range.find('_')
+
+        if star_idx != -1:
+            indicator_idx = star_idx
+        elif kill_idx != -1:
+            indicator_idx = kill_idx
+        else:
+            indicator_idx = None
 
         if indicator_idx is None:
             raise ParseError("No live/killed indicator found in object packet", self)
@@ -66,7 +73,7 @@ class ObjectPacket(PositionPacket):
 
         try:
             self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(
-                self._info[ts_start:ts_end], self._parse_warnings
+                self._info[ts_start:ts_end], self._parse_warnings, try_alternate_format=True
             )
         except ParseError as e:
             # Bad/placeholder timestamps (e.g. 111111z, 043516z with hour>23) are
@@ -77,7 +84,7 @@ class ObjectPacket(PositionPacket):
 
         logger.debug(f"Timestamp: {self.timestamp}")
 
-        data = self._info[ts_end:]
+        data = self._preprocess_position_data(self._info[ts_end:])
         if not data:
             return True
 

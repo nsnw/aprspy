@@ -240,6 +240,10 @@ class MessagePacket(GenericPacket):
                     self.announcement_id = addressee[3]
                     logger.debug("Non-standard announcement: {}".format(addressee))
 
+            elif addressee[3:].rstrip() == "":
+                # BLN with no identifier (e.g. "BLN      ") — treat as unnumbered bulletin
+                logger.debug("Bulletin with no identifier: {}".format(addressee))
+
             else:
                 # Incorrectly-formatted bulletin
                 raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)

@@ -4,7 +4,8 @@ from enum import Enum
 
 class ParseWarningSeverity(Enum):
     """Whether a warning is recoverable or caused a full parse downgrade."""
-    WARNING = "WARNING"    # recoverable; packet is correctly typed
+    INFO = "INFO"          # non-conformant but unambiguously parseable; no effect on result
+    WARNING = "WARNING"    # recoverable ambiguity that affected how the packet was parsed
     DOWNGRADE = "DOWNGRADE"  # parse failed completely; packet returned as GenericPacket
 
 
@@ -28,6 +29,12 @@ class ParseWarningCode(Enum):
     TIMESTAMP_LOCAL_TIME = "TIMESTAMP_LOCAL_TIME"
     TIMESTAMP_ALL_ZEROES = "TIMESTAMP_ALL_ZEROES"
     TIMESTAMP_PARSE_ERROR = "TIMESTAMP_PARSE_ERROR"
+    TIMESTAMP_FORMAT_FALLBACK = "TIMESTAMP_FORMAT_FALLBACK"  # tried HHMMSS after DDHHMM failed
+
+    # Position
+    POSITION_NO_DATA = "POSITION_NO_DATA"              # all-spaces placeholder coords
+    POSITION_DEL_CHARS_APPLIED = "POSITION_DEL_CHARS_APPLIED"  # \x7f treated as backspace
+    POSITION_LEADING_WHITESPACE = "POSITION_LEADING_WHITESPACE"  # leading spaces stripped
 
     # Path
     PATH_INVALID_Q_CONSTRUCT = "PATH_INVALID_Q_CONSTRUCT"
@@ -68,4 +75,6 @@ class ParseWarning:
     def __str__(self) -> str:
         if self.severity == ParseWarningSeverity.DOWNGRADE:
             return "[DOWNGRADE:{}] {}".format(self.code.value, self.message)
+        if self.severity == ParseWarningSeverity.INFO:
+            return "[INFO:{}] {}".format(self.code.value, self.message)
         return "[{}] {}".format(self.code.value, self.message)

@@ -228,7 +228,15 @@ class TelemetryPacket(GenericPacket):
         # Telemetry packets without the digital section BUT with a comment have also been seen. If
         # we catch an exception doing this, assume the whole remainder is a comment
         try:
-            (self.dv, self.comment) = re.match(r'(\d+)[\s,]?(.*)', remainder).groups()
+            (dv_str, self.comment) = re.match(r'(\d+)[\s,]?(.*)', remainder).groups()
+            if not re.match(r'^[01]{1,8}$', dv_str):
+                normalised = re.sub(r'[2-9]', '1', dv_str)
+                self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
+                           "Digital value '{}' contains non-binary digits; normalising to '{}'".format(
+                               dv_str, normalised))
+                self.dv = normalised
+            else:
+                self.dv = dv_str
 
         except AttributeError:
             # No match, which means there's no digital values

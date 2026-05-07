@@ -208,9 +208,10 @@ def test_invalid_announcement_id():
     assert p.announcement_id == 'A'
 
 
-def test_invalid_bulletin():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin', strict=True)
+def test_bulletin_no_id():
+    p = APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin')
+    assert type(p).__name__ == 'MessagePacket'
+    assert p.addressee == 'BLN'
 
 
 # --- Generation ---
