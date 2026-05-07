@@ -7,7 +7,7 @@ from bitstring import Bits
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
-from ..warnings import ParseWarning, ParseWarningCode
+from ..warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 from .generic import GenericPacket
 
 # Set up logging
@@ -47,7 +47,8 @@ class TelemetryAnalogValue:
                         self._warnings.append(ParseWarning(
                             code=ParseWarningCode.TELEMETRY_INVALID_ANALOG_VALUE,
                             message="Analog value {!r} has trailing junk; using {!r}".format(
-                                value, recovered)
+                                value, recovered),
+                            severity=ParseWarningSeverity.INFO
                         ))
                     return
                 except (ValueError, TypeError):
@@ -233,7 +234,8 @@ class TelemetryPacket(GenericPacket):
                 normalised = re.sub(r'[2-9]', '1', dv_str)
                 self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
                            "Digital value '{}' contains non-binary digits; normalising to '{}'".format(
-                               dv_str, normalised))
+                               dv_str, normalised),
+                           ParseWarningSeverity.INFO)
                 self.dv = normalised
             else:
                 self.dv = dv_str
