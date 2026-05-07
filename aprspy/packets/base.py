@@ -2,7 +2,7 @@ import logging
 from typing import List, Self
 from aprspy.components import Path, Station
 from aprspy.exceptions import InvalidSourceException, InvalidDestinationException
-from aprspy.warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
+from aprspy.warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity, ParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,28 @@ class Packet:
             self.info = info
 
     def _warn(self, code: ParseWarningCode, message: str,
-              severity: ParseWarningSeverity = ParseWarningSeverity.WARNING) -> None:
+              severity: ParseWarningSeverity = ParseWarningSeverity.LENIENT) -> None:
         """Log a parse warning and record it on the packet."""
         w = ParseWarning(code=code, message=message, severity=severity)
-        logger.warning(str(w))
+        if severity == ParseWarningSeverity.DOWNGRADE:
+            logger.warning(str(w))
+        else:
+            logger.info(str(w))
         self._parse_warnings.append(w)
 
     @property
     def parse_warnings(self) -> List[ParseWarning]:
         """List of :class:`~aprspy.warnings.ParseWarning` objects generated during parsing."""
         return self._parse_warnings
+
+    @property
+    def parse_result(self) -> ParseResult:
+        """Overall quality of the parsed packet."""
+        if not self._parse_warnings:
+            return ParseResult.OK
+        if any(w.severity == ParseWarningSeverity.DOWNGRADE for w in self._parse_warnings):
+            return ParseResult.DOWNGRADED
+        return ParseResult.LENIENT
 
     @property
     def source(self) -> Station:

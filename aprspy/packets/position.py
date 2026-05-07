@@ -466,12 +466,12 @@ class PositionPacket(GenericPacket):
         if processed != data:
             self._warn(ParseWarningCode.POSITION_DEL_CHARS_APPLIED,
                        "DEL (\\x7f) chars applied as backspace in position data",
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
         lstripped = processed.lstrip()
         if lstripped != processed:
             self._warn(ParseWarningCode.POSITION_LEADING_WHITESPACE,
                        "Leading whitespace stripped from position data",
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
             processed = lstripped
         return processed
 
@@ -509,7 +509,7 @@ class PositionPacket(GenericPacket):
         if self.latitude is None:
             self._warn(ParseWarningCode.POSITION_NO_DATA,
                        "Position is a placeholder (all-spaces coordinates)",
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
 
         if len(data) <= 19:
             return

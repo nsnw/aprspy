@@ -3,10 +3,17 @@ from enum import Enum
 
 
 class ParseWarningSeverity(Enum):
-    """Whether a warning is recoverable or caused a full parse downgrade."""
-    INFO = "INFO"          # non-conformant but unambiguously parseable; no effect on result
-    WARNING = "WARNING"    # recoverable ambiguity that affected how the packet was parsed
-    DOWNGRADE = "DOWNGRADE"  # parse failed completely; packet returned as GenericPacket
+    """Whether a warning reflects leniency or a full parse downgrade."""
+    LENIENT = "LENIENT"      # non-conformant or worked around, but successfully parsed
+    DOWNGRADE = "DOWNGRADE"  # parse failed; packet returned as GenericPacket
+
+
+class ParseResult(Enum):
+    """Overall quality of a parsed packet."""
+    OK = "OK"              # parsed cleanly, no issues
+    LENIENT = "LENIENT"    # parsed successfully but with leniency or non-conformance
+    DOWNGRADED = "DOWNGRADED"  # specific parser failed; returned as a less specific type
+    FAILED = "FAILED"      # could not be parsed at all (signalled by ParseError exception)
 
 
 class ParseWarningCode(Enum):
@@ -22,6 +29,7 @@ class ParseWarningCode(Enum):
     TELEMETRY_INVALID_ANALOG_VALUE = "TELEMETRY_INVALID_ANALOG_VALUE"
     TELEMETRY_INVALID_DIGITAL_VALUE = "TELEMETRY_INVALID_DIGITAL_VALUE"
     TELEMETRY_PARM_TOO_MANY_FIELDS = "TELEMETRY_PARM_TOO_MANY_FIELDS"
+    TELEMETRY_UNIT_TOO_MANY_FIELDS = "TELEMETRY_UNIT_TOO_MANY_FIELDS"
     TELEMETRY_EQNS_TOO_MANY_FIELDS = "TELEMETRY_EQNS_TOO_MANY_FIELDS"
 
     # Timestamps
@@ -29,12 +37,12 @@ class ParseWarningCode(Enum):
     TIMESTAMP_LOCAL_TIME = "TIMESTAMP_LOCAL_TIME"
     TIMESTAMP_ALL_ZEROES = "TIMESTAMP_ALL_ZEROES"
     TIMESTAMP_PARSE_ERROR = "TIMESTAMP_PARSE_ERROR"
-    TIMESTAMP_FORMAT_FALLBACK = "TIMESTAMP_FORMAT_FALLBACK"  # tried HHMMSS after DDHHMM failed
+    TIMESTAMP_FORMAT_FALLBACK = "TIMESTAMP_FORMAT_FALLBACK"
 
     # Position
-    POSITION_NO_DATA = "POSITION_NO_DATA"              # all-spaces placeholder coords
-    POSITION_DEL_CHARS_APPLIED = "POSITION_DEL_CHARS_APPLIED"  # \x7f treated as backspace
-    POSITION_LEADING_WHITESPACE = "POSITION_LEADING_WHITESPACE"  # leading spaces stripped
+    POSITION_NO_DATA = "POSITION_NO_DATA"
+    POSITION_DEL_CHARS_APPLIED = "POSITION_DEL_CHARS_APPLIED"
+    POSITION_LEADING_WHITESPACE = "POSITION_LEADING_WHITESPACE"
 
     # Path
     PATH_INVALID_Q_CONSTRUCT = "PATH_INVALID_Q_CONSTRUCT"
@@ -43,10 +51,10 @@ class ParseWarningCode(Enum):
     # Messages
     MESSAGE_TOO_LONG = "MESSAGE_TOO_LONG"
 
-    # General
-    PACKET_USER_DEFINED_UNSUPPORTED = "PACKET_USER_DEFINED_UNSUPPORTED"
+    # User-defined
+    USER_DEFINED_UNSUPPORTED = "USER_DEFINED_UNSUPPORTED"
 
-    # Downgrade codes — parse failed completely, packet returned as GenericPacket
+    # Downgrade codes — parse failed; packet returned as GenericPacket
     MICE_PARSE_FAILED = "MICE_PARSE_FAILED"
     POSITION_PARSE_FAILED = "POSITION_PARSE_FAILED"
     NMEA_PARSE_FAILED = "NMEA_PARSE_FAILED"
@@ -61,7 +69,7 @@ class ParseWarningCode(Enum):
     QUERY_PARSE_FAILED = "QUERY_PARSE_FAILED"
     ULTIMETER_PARSE_FAILED = "ULTIMETER_PARSE_FAILED"
     USER_DEFINED_PARSE_FAILED = "USER_DEFINED_PARSE_FAILED"
-    PARSE_FAILED = "PARSE_FAILED"  # fallback for unrecognised packet types
+    GENERIC_PARSE_FAILED = "GENERIC_PARSE_FAILED"
 
 
 @dataclass
@@ -70,11 +78,9 @@ class ParseWarning:
 
     code: ParseWarningCode
     message: str
-    severity: ParseWarningSeverity = field(default=ParseWarningSeverity.WARNING)
+    severity: ParseWarningSeverity = field(default=ParseWarningSeverity.LENIENT)
 
     def __str__(self) -> str:
         if self.severity == ParseWarningSeverity.DOWNGRADE:
             return "[DOWNGRADE:{}] {}".format(self.code.value, self.message)
-        if self.severity == ParseWarningSeverity.INFO:
-            return "[INFO:{}] {}".format(self.code.value, self.message)
-        return "[{}] {}".format(self.code.value, self.message)
+        return "[LENIENT:{}] {}".format(self.code.value, self.message)

@@ -468,7 +468,7 @@ class APRS:
                     _dti, _info = m.groups()
                 fallback._info = (_dti or '') + (_info or '')
             _w = ParseWarning(
-                code=ParseWarningCode.PARSE_FAILED,
+                code=ParseWarningCode.GENERIC_PARSE_FAILED,
                 message=str(e),
                 severity=ParseWarningSeverity.DOWNGRADE
             )
@@ -513,7 +513,7 @@ class APRS:
             packet.parse()
             if isinstance(packet, UserDefinedPacket):
                 packet._warn(
-                    ParseWarningCode.PACKET_USER_DEFINED_UNSUPPORTED,
+                    ParseWarningCode.USER_DEFINED_UNSUPPORTED,
                     "User-defined packets are not fully supported."
                 )
         except ParseError as e:
@@ -529,7 +529,7 @@ class APRS:
             )
             packet.parse()
             _w = ParseWarning(
-                code=_DOWNGRADE_CODE.get(packet_type, ParseWarningCode.PARSE_FAILED),
+                code=_DOWNGRADE_CODE.get(packet_type, ParseWarningCode.GENERIC_PARSE_FAILED),
                 message=str(parse_error_msg),
                 severity=ParseWarningSeverity.DOWNGRADE
             )

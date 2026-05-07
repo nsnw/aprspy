@@ -68,7 +68,7 @@ class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
         if len(values) > len(fields):
             self._warn(ParseWarningCode.TELEMETRY_PARM_TOO_MANY_FIELDS,
                        "PARM packet has more fields than expected ({})".format(len(values)),
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
 
         return True
 
@@ -84,9 +84,9 @@ class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
         for field, value in zip(fields, values):
             setattr(self, field, value)
         if len(values) > len(fields):
-            self._warn(ParseWarningCode.TELEMETRY_PARM_TOO_MANY_FIELDS,
+            self._warn(ParseWarningCode.TELEMETRY_UNIT_TOO_MANY_FIELDS,
                        "UNIT packet has more fields than expected ({})".format(len(values)),
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
 
         return True
 
@@ -111,7 +111,7 @@ class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
             self._warn(ParseWarningCode.TELEMETRY_EQNS_TOO_MANY_FIELDS,
                        "Equation coefficient specifies too many fields ({} > {})".format(
                            len(values), len(fields)),
-                       ParseWarningSeverity.INFO)
+                       ParseWarningSeverity.LENIENT)
 
         return True
 

@@ -622,7 +622,7 @@ class APRSUtils:
                                 code=ParseWarningCode.TIMESTAMP_FORMAT_FALLBACK,
                                 message="DDHHMM parse failed for '{}', interpreted as HHMMSS".format(
                                     raw_timestamp),
-                                severity=ParseWarningSeverity.INFO
+                                severity=ParseWarningSeverity.LENIENT
                             )
                             logger.info(str(_w))
                             if _warnings is not None:

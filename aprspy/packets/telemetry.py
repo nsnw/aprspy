@@ -48,7 +48,7 @@ class TelemetryAnalogValue:
                             code=ParseWarningCode.TELEMETRY_INVALID_ANALOG_VALUE,
                             message="Analog value {!r} has trailing junk; using {!r}".format(
                                 value, recovered),
-                            severity=ParseWarningSeverity.INFO
+                            severity=ParseWarningSeverity.LENIENT
                         ))
                     return
                 except (ValueError, TypeError):
@@ -235,7 +235,7 @@ class TelemetryPacket(GenericPacket):
                 self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
                            "Digital value '{}' contains non-binary digits; normalising to '{}'".format(
                                dv_str, normalised),
-                           ParseWarningSeverity.INFO)
+                           ParseWarningSeverity.LENIENT)
                 self.dv = normalised
             else:
                 self.dv = dv_str
