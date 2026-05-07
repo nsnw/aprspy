@@ -134,7 +134,8 @@ def test_with_hdg_and_pwr_status_message(packet_with_hdg_and_pwr):
 def test_invalid_mh6_status_message_missing_initial_space():
     with pytest.raises(ParseError):
         APRS.parse_packet(
-            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator'
+            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator',
+            strict=True
         )
 
 

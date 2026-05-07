@@ -125,9 +125,9 @@ def test_compressed_comment(compressed):
 
 def test_invalid_live_killed():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X092345z4903.50N/07201.75W>')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X092345z4903.50N/07201.75W>', strict=True)
 
 
 def test_too_short():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT', strict=True)

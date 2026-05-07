@@ -75,7 +75,7 @@ def test_message_id_none(packet):
 
 def test_invalid_message_id():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{000001')
+        APRS.parse_packet('XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{000001', strict=True)
 
 
 def test_invalid_message_addressee_type():
@@ -199,7 +199,7 @@ def test_invalid_addressee_field_size():
 
 def test_message_invalid_message_id():
     with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{123456')
+        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{123456', strict=True)
 
 
 def test_invalid_announcement_id():
@@ -210,7 +210,7 @@ def test_invalid_announcement_id():
 
 def test_invalid_bulletin():
     with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin')
+        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin', strict=True)
 
 
 # --- Generation ---

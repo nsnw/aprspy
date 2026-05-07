@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pynmea2
 
 from ..exceptions import ParseError
+from ..warnings import ParseWarningCode
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ class NMEAPacket(PositionPacket):
             self.checksum_valid = True
         except pynmea2.ChecksumError:
             self.checksum_valid = False
-            logger.warning(f"NMEA checksum invalid for: {sentence!r}")
+            self._warn(ParseWarningCode.NMEA_CHECKSUM_INVALID, f"NMEA checksum invalid for: {sentence!r}")
             # Re-parse without the checksum so we can still extract data
             try:
                 msg = pynmea2.parse(self._strip_checksum(sentence))

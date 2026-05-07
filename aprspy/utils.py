@@ -6,6 +6,7 @@ import math
 from datetime import datetime, timedelta, UTC
 from typing import Union, Tuple, Optional
 from .exceptions import ParseError
+from .warnings import ParseWarning, ParseWarningCode
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -450,11 +451,12 @@ class APRSUtils:
         return lng
 
     @staticmethod
-    def decode_timestamp(raw_timestamp: str) -> datetime:
+    def decode_timestamp(raw_timestamp: str, _warnings: list = None) -> datetime:
         """
         Decode a timestamp.
 
         :param str raw_timestamp: a string representing a timestamp
+        :param list _warnings: optional list to append warning messages to
 
         Timestamps can take a number of different forms:-
          * Zulu, identified with a trailing 'z', which refers to zulu time
@@ -481,7 +483,13 @@ class APRSUtils:
             else:
                 # This is against spec, but as usual with APRS a lot of clients violate this - so
                 # assume they're zulu time
-                logger.warning("{} is an invalid timestamp type, assuming zulu".format(timestamp_type))
+                _w = ParseWarning(
+                    code=ParseWarningCode.TIMESTAMP_INVALID_TYPE,
+                    message="{} is an invalid timestamp type, assuming zulu".format(timestamp_type)
+                )
+                logger.warning(str(_w))
+                if _warnings is not None:
+                    _warnings.append(_w)
                 timestamp_type = 'zulu'
 
             # Get the current UTC ('zulu') time for comparison. Since timestamps in HHMMSS format
@@ -509,8 +517,14 @@ class APRSUtils:
                         tzinfo=UTC
                     )
                 except ValueError as e:
-                    logger.error("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
-                    raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
+                    _w = ParseWarning(
+                        code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
+                        message="Error parsing timestamp '{}': {}".format(raw_timestamp, e)
+                    )
+                    logger.warning(str(_w))
+                    if _warnings is not None:
+                        _warnings.append(_w)
+                    return None, timestamp_type
 
                 # Check it's not in the future
                 if ts > utc:
@@ -528,11 +542,23 @@ class APRSUtils:
                     # timezone, it's impossible to work out. APRS 1.01 C6 P22 states "It is
                     # recommended that future APRS implementations only transmit zulu format on the
                     # air", so hopefully this shouldn't be a problem in reality.
-                    logger.info("Local time specified in timestamp, assuming UTC.")
+                    _w = ParseWarning(
+                        code=ParseWarningCode.TIMESTAMP_LOCAL_TIME,
+                        message="Local time specified in timestamp, assuming UTC."
+                    )
+                    logger.warning(str(_w))
+                    if _warnings is not None:
+                        _warnings.append(_w)
 
                 # Sometimes, 000000 is used to indicate no timestamp is available
                 if timestamp[0:6] == "000000":
-                    logger.warning("Timestamp specified but is set to all zeroes.")
+                    _w = ParseWarning(
+                        code=ParseWarningCode.TIMESTAMP_ALL_ZEROES,
+                        message="Timestamp specified but is set to all zeroes."
+                    )
+                    logger.warning(str(_w))
+                    if _warnings is not None:
+                        _warnings.append(_w)
                     return None, timestamp_type
 
                 # DDHHMM
@@ -552,8 +578,14 @@ class APRSUtils:
                         tzinfo=UTC
                     )
                 except ValueError as e:
-                    logger.warning("Error parsing timestamp '{}': {}".format(timestamp, e))
-                    raise ParseError("Error parsing timestamp '{}': {}".format(timestamp, e))
+                    _w = ParseWarning(
+                        code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
+                        message="Error parsing timestamp '{}': {}".format(timestamp, e)
+                    )
+                    logger.warning(str(_w))
+                    if _warnings is not None:
+                        _warnings.append(_w)
+                    return None, timestamp_type
 
                 # Check it's not in the future
                 if ts > utc:
@@ -561,29 +593,39 @@ class APRSUtils:
                     # The time is in the future, so go back a month
                     # timedelta doesn't support subtracting months, so here be
                     # dirty hacks.
-                    if 1 < ts.month <= 12:
-                        month = ts.month - 1
-                        ts = datetime(
-                            year=utc.year,
-                            month=month,
-                            day=day,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            tzinfo=UTC
+                    try:
+                        if 1 < ts.month <= 12:
+                            month = ts.month - 1
+                            ts = datetime(
+                                year=utc.year,
+                                month=month,
+                                day=day,
+                                hour=hour,
+                                minute=minute,
+                                second=0,
+                                tzinfo=UTC
+                            )
+                        elif ts.month == 1:
+                            year = ts.year - 1
+                            month = 12
+                            ts = datetime(
+                                year=year,
+                                month=month,
+                                day=day,
+                                hour=hour,
+                                minute=minute,
+                                second=0,
+                                tzinfo=UTC
+                            )
+                    except ValueError as e:
+                        _w = ParseWarning(
+                            code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
+                            message="Error parsing timestamp '{}': {}".format(timestamp, e)
                         )
-                    elif ts.month == 1:
-                        year = ts.year - 1
-                        month = 12
-                        ts = datetime(
-                            year=year,
-                            month=month,
-                            day=day,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            tzinfo=UTC
-                        )
+                        logger.warning(str(_w))
+                        if _warnings is not None:
+                            _warnings.append(_w)
+                        return None, timestamp_type
 
                 # Convert to seconds
                 logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))

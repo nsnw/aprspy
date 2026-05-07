@@ -98,4 +98,4 @@ def test_rain_today(packet):
 
 def test_too_short():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:*C014550064')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:*C014550064', strict=True)

@@ -119,7 +119,7 @@ class StatusPacket(GenericPacket):
             # Check for a timestamp
             if re.match("^[0-9]{6}z", self._info):
                 try:
-                    self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(self._info[0:7])
+                    self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(self._info[0:7], self._parse_warnings)
                     # TODO Sanity check the timestamp type - status reports can only use zulu
                     # or local, so if hms is used, throw an error.
                     # if timestamp_type == 'h' and data_type_id == '>':

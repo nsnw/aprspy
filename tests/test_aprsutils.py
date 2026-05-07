@@ -5,6 +5,7 @@ from datetime import datetime, UTC
 
 from aprspy.utils import APRSUtils
 from aprspy.exceptions import ParseError
+from aprspy.warnings import ParseWarningCode
 
 
 # Uncompressed latitudes
@@ -370,13 +371,21 @@ def test_decode_timestamp_hms_time():
 
 
 def test_decode_timestamp_zulu_invalid_time_value():
-    with pytest.raises(ParseError):
-        APRSUtils.decode_timestamp("322345z")
+    warnings = []
+    ts, ts_type = APRSUtils.decode_timestamp("322345z", _warnings=warnings)
+    assert ts is None
+    assert ts_type == 'zulu'
+    assert len(warnings) == 1
+    assert warnings[0].code == ParseWarningCode.TIMESTAMP_PARSE_ERROR
 
 
 def test_decode_timestamp_hms_invalid_time_value():
-    with pytest.raises(ParseError):
-        APRSUtils.decode_timestamp("254517h")
+    warnings = []
+    ts, ts_type = APRSUtils.decode_timestamp("254517h", _warnings=warnings)
+    assert ts is None
+    assert ts_type == 'hms'
+    assert len(warnings) == 1
+    assert warnings[0].code == ParseWarningCode.TIMESTAMP_PARSE_ERROR
 
 
 def test_decode_timestamp_in_previous_month():

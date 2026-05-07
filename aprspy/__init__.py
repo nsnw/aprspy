@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Type
 
 from .exceptions import ParseError, UnsupportedError
+from .warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 from .packets.base import Packet
 from .packets.generic import GenericPacket
 from .packets.beacon import BeaconPacket
@@ -36,6 +37,24 @@ logger = logging.getLogger(__name__)
 
 # Named tuple to hold original raw values
 Raw = namedtuple('Raw', ['source', 'destination', 'path', 'information'])
+
+# Maps each packet type to the downgrade code used when its parse() raises ParseError.
+_DOWNGRADE_CODE = {
+    MICEPacket:           ParseWarningCode.MICE_PARSE_FAILED,
+    PositionPacket:       ParseWarningCode.POSITION_PARSE_FAILED,
+    NMEAPacket:           ParseWarningCode.NMEA_PARSE_FAILED,
+    MessagePacket:        ParseWarningCode.MESSAGE_PARSE_FAILED,
+    ObjectPacket:         ParseWarningCode.OBJECT_PARSE_FAILED,
+    ItemReportPacket:     ParseWarningCode.ITEM_REPORT_PARSE_FAILED,
+    StatusPacket:         ParseWarningCode.STATUS_PARSE_FAILED,
+    TelemetryPacket:      ParseWarningCode.TELEMETRY_PARSE_FAILED,
+    WeatherPacket:        ParseWarningCode.WEATHER_PARSE_FAILED,
+    ThirdPartyPacket:     ParseWarningCode.THIRD_PARTY_PARSE_FAILED,
+    BeaconPacket:         ParseWarningCode.BEACON_PARSE_FAILED,
+    QueryPacket:          ParseWarningCode.QUERY_PARSE_FAILED,
+    UltimeterPacket:      ParseWarningCode.ULTIMETER_PARSE_FAILED,
+    UserDefinedPacket:    ParseWarningCode.USER_DEFINED_PARSE_FAILED,
+}
 
 BEACON_ADDRESSES = [
     'AIR', 'ALL', 'AP', 'BEACON', 'CQ', 'GPS', 'DF', 'DGPS', 'DRILL', 'DX', 'ID', 'JAVA', 'MAIL',
@@ -119,7 +138,7 @@ class APRS:
         """
         try:
             (source, destination, path, data_type_id, info) = re.match(
-                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+),([A-Za-z0-9\-*,]+):(.?)(.*)',
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+)(?:,([A-Za-z0-9\-*,]+))?:(.?)(.*)',
                 packet
             ).groups()
 
@@ -227,7 +246,7 @@ class APRS:
         """
         Check if the packet is a telemetry parameter name packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:PARM\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:PARM\.', packet):
             return True
 
         return False
@@ -237,7 +256,7 @@ class APRS:
         """
         Check if the packet is a telemetry unit label packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:UNIT\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:UNIT\.', packet):
             return True
 
         return False
@@ -247,7 +266,7 @@ class APRS:
         """
         Check if the packet is a telemetry equation coefficients packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:EQNS\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:EQNS\.', packet):
             return True
 
         return False
@@ -257,7 +276,7 @@ class APRS:
         """
         Check if the packet is a telemetry bit sense project name packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:BITS\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:BITS\.', packet):
             return True
 
         return False
@@ -362,9 +381,6 @@ class APRS:
         # Check if the data type ID indicates a user-defined packet.
         elif cls.is_user_defined_data_type_id(data_type_id):
             logger.debug("Packet is a user-defined packet")
-            logger.warning(
-                "User-defined packets are not fully supported."
-            )
             packet_type = UserDefinedPacket
 
         # Unsupported packet types.
@@ -470,6 +486,31 @@ class APRS:
             info=info
         )
 
-        packet.parse()
+        try:
+            packet.parse()
+            if isinstance(packet, UserDefinedPacket):
+                packet._warn(
+                    ParseWarningCode.PACKET_USER_DEFINED_UNSUPPORTED,
+                    "User-defined packets are not fully supported."
+                )
+        except ParseError as e:
+            if strict:
+                raise
+            parse_error_msg = str(e)
+            packet = GenericPacket(
+                source=source,
+                destination=destination,
+                path=path,
+                data_type_id=data_type_id,
+                info=info
+            )
+            packet.parse()
+            _w = ParseWarning(
+                code=_DOWNGRADE_CODE.get(packet_type, ParseWarningCode.PARSE_FAILED),
+                message=str(parse_error_msg),
+                severity=ParseWarningSeverity.DOWNGRADE
+            )
+            logger.warning(str(_w))
+            packet._parse_warnings.append(_w)
 
         return packet

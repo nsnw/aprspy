@@ -4,6 +4,7 @@ import re
 import logging
 
 from ..exceptions import ParseError, GenerateError
+from ..warnings import ParseWarningCode
 from .generic import GenericPacket
 
 # Set up logging
@@ -68,7 +69,8 @@ class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
                 setattr(self, fields[field_number], value)
                 field_number += 1
         except IndexError:
-            logger.warning("PARM packet has more fields than expected ({})".format(len(values)))
+            self._warn(ParseWarningCode.TELEMETRY_PARM_TOO_MANY_FIELDS,
+                       "PARM packet has more fields than expected ({})".format(len(values)))
 
         return True
 
@@ -113,9 +115,10 @@ class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
                 setattr(self, fields[field_number], value)
                 field_number += 1
         except IndexError:
-            logger.warning("Equation coefficient specifies too many fields ({} > {})".format(
-                len(values), len(fields)
-            ))
+            self._warn(ParseWarningCode.TELEMETRY_EQNS_TOO_MANY_FIELDS,
+                       "Equation coefficient specifies too many fields ({} > {})".format(
+                           len(values), len(fields)
+                       ))
 
         return True
 

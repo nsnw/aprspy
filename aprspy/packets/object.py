@@ -66,7 +66,7 @@ class ObjectPacket(PositionPacket):
 
         try:
             self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(
-                self._info[ts_start:ts_end]
+                self._info[ts_start:ts_end], self._parse_warnings
             )
         except ParseError as e:
             # Bad/placeholder timestamps (e.g. 111111z, 043516z with hour>23) are

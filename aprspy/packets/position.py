@@ -433,7 +433,7 @@ class PositionPacket(GenericPacket):
             if len(data) < 7:
                 raise ParseError("Missing timestamp in position packet", self)
             try:
-                self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7])
+                self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7], self._parse_warnings)
                 data = data[7:]
             except ParseError:
                 # Invalid or placeholder timestamp (e.g. '<data>z', '......z', or omitted

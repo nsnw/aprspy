@@ -4,6 +4,7 @@ import re
 import logging
 
 from ..exceptions import ParseError, GenerateError
+from ..warnings import ParseWarningCode
 from .generic import GenericPacket
 
 # Set up logging
@@ -82,7 +83,8 @@ class MessagePacket(GenericPacket):
         elif type(value) is str:
             if len(value) > 67:
                 # The maximum length of a message is 67 characters (C14 P71)
-                logger.warning(
+                self._warn(
+                    ParseWarningCode.MESSAGE_TOO_LONG,
                     "Message length should not be longer than 67 characters ({} given)".format(
                         len(value)
                     )
@@ -285,7 +287,7 @@ class MessagePacket(GenericPacket):
         else:
             raise GenerateError("No addressee, announcement or bulletin details", self)
 
-        if self.message:
+        if self.message is not None:
             info += ":{}".format(self.message)
         else:
             raise GenerateError("No message", self)
