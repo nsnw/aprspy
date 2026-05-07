@@ -4,7 +4,7 @@ import re
 import logging
 
 from ..exceptions import ParseError, GenerateError
-from ..warnings import ParseWarningCode
+from ..warnings import ParseWarningCode, ParseWarningSeverity
 from .generic import GenericPacket
 
 # Set up logging
@@ -63,14 +63,12 @@ class TelemetryParameterNamePacket(TelemetryDefinitionPacket):
         # Fields
         fields = ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']
 
-        try:
-            field_number = 0
-            for value in values:
-                setattr(self, fields[field_number], value)
-                field_number += 1
-        except IndexError:
+        for field, value in zip(fields, values):
+            setattr(self, field, value)
+        if len(values) > len(fields):
             self._warn(ParseWarningCode.TELEMETRY_PARM_TOO_MANY_FIELDS,
-                       "PARM packet has more fields than expected ({})".format(len(values)))
+                       "PARM packet has more fields than expected ({})".format(len(values)),
+                       ParseWarningSeverity.INFO)
 
         return True
 
@@ -83,14 +81,12 @@ class TelemetryUnitLabelPacket(TelemetryDefinitionPacket):
         # Fields
         fields = ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8']
 
-        try:
-            field_number = 0
-            for value in values:
-                setattr(self, fields[field_number], value)
-                field_number += 1
-
-        except IndexError:
-            raise ParseError("Invalid number of fields for telemetry definition packet.")
+        for field, value in zip(fields, values):
+            setattr(self, field, value)
+        if len(values) > len(fields):
+            self._warn(ParseWarningCode.TELEMETRY_PARM_TOO_MANY_FIELDS,
+                       "UNIT packet has more fields than expected ({})".format(len(values)),
+                       ParseWarningSeverity.INFO)
 
         return True
 
@@ -109,16 +105,13 @@ class TelemetryEquationCoefficientsPacket(TelemetryDefinitionPacket):
             'a5_1', 'a5_2', 'a5_3'
         ]
 
-        field_number = 0
-        try:
-            for value in values:
-                setattr(self, fields[field_number], value)
-                field_number += 1
-        except IndexError:
+        for field, value in zip(fields, values):
+            setattr(self, field, value)
+        if len(values) > len(fields):
             self._warn(ParseWarningCode.TELEMETRY_EQNS_TOO_MANY_FIELDS,
                        "Equation coefficient specifies too many fields ({} > {})".format(
-                           len(values), len(fields)
-                       ))
+                           len(values), len(fields)),
+                       ParseWarningSeverity.INFO)
 
         return True
 
