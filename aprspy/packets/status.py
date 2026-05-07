@@ -5,6 +5,7 @@ import logging
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
+from ..warnings import ParseWarningCode
 from .generic import GenericPacket
 
 # Set up logging
@@ -75,29 +76,34 @@ class StatusPacket(GenericPacket):
             mh_6 = self._info[0:8]
             logger.debug("Considering as Maidenhead locator: {}".format(mh_6))
 
-        if mh_6 is not None and re.match("[A-Z]{2}[0-9]{2}[A-Z]{2}[/\\\0-9A-Z].", mh_6):
-            # Maidenhead locator (GGnngg)
+        if mh_6 is not None and re.match(r'[A-Z]{2}[0-9]{2}[A-Z]{2}[/\\0-9A-Z].', mh_6):
+            # Maidenhead locator (GGnngg) with symbol table and symbol ID
             self.maidenhead_locator = mh_6[0:6]
-
             self.symbol_table = mh_6[6]
             self.symbol_id = mh_6[7]
-
             logger.debug("Status with Maidenhead locator {}, symbol {} {}".format(
                 self.maidenhead_locator, self.symbol_table, self.symbol_id
             ))
-
-            if len(self._info) != 8:
-                # First character of the text must be " " (C16 P82)
-                if self._info[8] != " ":
-                    # TODO
-                    raise ParseError("Status message is invalid", self)
-                else:
-                    self.status_message = self._info[9:]
-                    logger.debug("Status message is {}".format(self.status_message))
-            else:
+            if len(self._info) == 8:
                 logger.debug("No status message")
+            elif self._info[8] == " ":
+                self.status_message = self._info[9:]
+                logger.debug("Status message is {}".format(self.status_message))
+            else:
+                # Missing mandatory space before text — accept leniently
+                self._warn(ParseWarningCode.STATUS_MAIDENHEAD_NO_TEXT_SPACE,
+                           "Missing space before status text after Maidenhead+symbol")
+                self.status_message = self._info[8:]
 
-        elif mh_4 is not None and re.match(r'[A-Z]{2}[0-9]{2}[/\\\0-9A-Z].', mh_4):
+        elif (mh_6 is not None and re.match(r'[A-Z]{2}[0-9]{2}[A-Z]{2}', self._info[:6])
+              and (len(self._info) == 6 or self._info[6] == ' ')):
+            # 6-char Maidenhead without symbol — non-conformant but common
+            self.maidenhead_locator = self._info[:6]
+            self._warn(ParseWarningCode.STATUS_MAIDENHEAD_NO_SYMBOL,
+                       "6-char Maidenhead locator without symbol table/ID")
+            self.status_message = self._info[7:] if len(self._info) > 7 else None
+
+        elif mh_4 is not None and re.match(r'[A-Z]{2}[0-9]{2}[/\\0-9A-Z].', mh_4):
             # Maidenhead locator (GGnn) — only commit if followed by end or a space.
             # Free-form status text can collide with this pattern (e.g. "FM439.1625 T67"
             # looks like locator FM43 + overlay 9 + symbol .) so we fall through to plain
