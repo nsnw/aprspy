@@ -318,6 +318,12 @@ class APRS:
             logger.debug("Packet is a beacon packet")
             packet_type = BeaconPacket
 
+        # Peet Bros Ultimeter 2000 '!!' raw format: DTI '!' + info starts with '!'.
+        # Intercept before PositionPacket since '!' is also a position DTI.
+        elif data_type_id == '!' and info.startswith('!'):
+            logger.debug("Packet is a Peet Bros Ultimeter 2000 raw weather packet")
+            packet_type = Ultimeter2000Packet
+
         # Next, check the data type ID to see if it matches those used by position packets.
         elif cls.is_position_data_type_id(data_type_id):
             logger.debug("Packet is a position packet")

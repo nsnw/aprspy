@@ -181,3 +181,61 @@ def test_ultw_no_parse_warnings(ultw_packet):
 def test_ultw_too_short():
     with pytest.raises(ParseError):
         APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:$ULTW0176', strict=True)
+
+
+# !! raw format tests
+# K4CCC-9 sample: !!000000C20205010F27C002C3--------007B001900000000
+ULTW_RAW_FORMAT = 'K4CCC-9>APRS,WIDE2-2,qAR,W4DEX:!!000000C20205010F27C002C3--------007B001900000000'
+
+# Station with missing barometer and humidity
+ULTW_RAW_MISSING = 'ELPASO>APN382,CABALL*,WIDE3-2,qAO,N7SGT-10:!!0000008002140000----------------0009004A00000000'
+
+
+@pytest.fixture
+def raw_format_packet():
+    return APRS.parse_packet(ULTW_RAW_FORMAT)
+
+
+def test_raw_format_type(raw_format_packet):
+    assert type(raw_format_packet) == Ultimeter2000Packet
+
+
+def test_raw_format_wind_speed_peak(raw_format_packet):
+    # F0 = 0000 = 0 → 0.0 mph
+    assert raw_format_packet.wind_speed_peak == 0.0
+
+
+def test_raw_format_wind_direction(raw_format_packet):
+    # F1 = 00C2 = 194 degrees
+    assert raw_format_packet.wind_direction == 194
+
+
+def test_raw_format_outdoor_temp(raw_format_packet):
+    # F2 = 0205 = 517 → 51.7 °F
+    assert raw_format_packet.outdoor_temp == pytest.approx(51.7)
+
+
+def test_raw_format_barometric_pressure(raw_format_packet):
+    # F4 = 27C0 = 10176 → 1017.6 mbar
+    assert raw_format_packet.barometric_pressure == pytest.approx(1017.6)
+
+
+def test_raw_format_outdoor_humidity(raw_format_packet):
+    # F5 = 02C3 = 707 → 70.7 %
+    assert raw_format_packet.outdoor_humidity == pytest.approx(70.7)
+
+
+def test_raw_format_missing_fields():
+    p = APRS.parse_packet(ULTW_RAW_MISSING)
+    assert type(p) == Ultimeter2000Packet
+    assert p.barometric_pressure is None
+    assert p.outdoor_humidity is None
+
+
+def test_raw_format_no_parse_warnings(raw_format_packet):
+    assert raw_format_packet.parse_warnings == []
+
+
+def test_raw_format_too_short():
+    with pytest.raises(ParseError):
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:!!0000', strict=True)

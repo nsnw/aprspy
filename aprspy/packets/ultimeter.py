@@ -166,25 +166,33 @@ class Ultimeter2000Packet(GenericPacket):
     """
     Class to represent Peet Bros Ultimeter 2000 weather packets.
 
-    DTI '$', info field starts with 'ULTW'.
+    Two on-air formats are handled:
 
-    Info field format: 'ULTW' followed by 52 hex characters (13 × 4-char fields).
-    '----' indicates a missing/unavailable sensor reading.
-
-    Field map (0-indexed, each field 4 hex chars):
+    **$ULTW format** (DTI '$', info starts with 'ULTW'):
+      'ULTW' + 52 hex chars (13 × 4-char fields). '----' = missing sensor.
       F0  wind_speed_peak       uint16  0.1 mph
       F1  wind_direction        uint16  degrees (0–360)
       F2  outdoor_temp          int16   0.1 °F
-      F3  rain_total            uint16  0.01 in (long-term accumulated)
+      F3  rain_total            uint16  0.01 in (long-term)
       F4  barometric_pressure   uint16  0.1 mbar
       F5  pressure_delta        int16   0.1 mbar (change since last reading)
-      F6  [station model ID]    uint16  (per-station constant, not a measurement)
-      F7  [flags]               uint16  (typically 0x0001)
+      F6  [station model ID]    uint16
+      F7  [flags]               uint16
       F8  outdoor_humidity      uint16  0.1 %  (may be '----')
-      F9  [unknown]             uint16
+      F9  [unknown]
       F10 wind_speed_avg        uint16  0.1 mph
       F11 rain_today            uint16  0.01 in (since midnight)
-      F12 [unknown]             uint16
+      F12 [unknown]
+
+    **!! raw format** (DTI '!', info starts with '!'):
+      '!' + 48 hex chars (12 × 4-char fields). '----' = missing sensor.
+      F0  wind_speed_peak       uint16  0.1 mph
+      F1  wind_direction        uint16  degrees (0–360)
+      F2  outdoor_temp          int16   0.1 °F
+      F3  rain_total            uint16  0.01 in (long-term)
+      F4  barometric_pressure   uint16  0.1 mbar
+      F5  outdoor_humidity      uint16  0.1 %  (may be '----')
+      F6–F11 [unknown / reserved]
     """
 
     # Raw fields stored as properties with explicit units
@@ -274,7 +282,16 @@ class Ultimeter2000Packet(GenericPacket):
         if not self._info:
             return True
 
-        # info starts with 'ULTW'; payload is the 52 hex chars after that
+        if self._info.startswith('ULTW'):
+            return self._parse_ultw()
+        elif self._info.startswith('!'):
+            return self._parse_raw()
+        else:
+            raise ParseError(
+                f"Unrecognised Ultimeter 2000 info field: {self._info[:10]!r}", self
+            )
+
+    def _parse_ultw(self) -> bool:
         payload = self._info[4:]
         if len(payload) < 52:
             raise ParseError(
@@ -324,6 +341,45 @@ class Ultimeter2000Packet(GenericPacket):
             self.rain_today = raw_rain_today / 100.0
 
         # fields[12] unknown — skip
+
+        return True
+
+    def _parse_raw(self) -> bool:
+        # '!!' raw format: info[0]='!' (already stripped as DTI), info starts with '!'
+        payload = self._info[1:]
+        if len(payload) < 48:
+            raise ParseError(
+                f"!! Ultimeter payload too short (expected 48 hex chars, got {len(payload)})", self
+            )
+
+        fields = [payload[i:i + 4] for i in range(0, 48, 4)]
+
+        raw_peak = _u16(fields[0])
+        if raw_peak is not None:
+            self.wind_speed_peak = raw_peak / 10.0
+
+        raw_dir = _u16(fields[1])
+        if raw_dir is not None:
+            self.wind_direction = raw_dir
+
+        raw_temp = _signed_word(fields[2])
+        if raw_temp is not None:
+            self.outdoor_temp = raw_temp / 10.0
+
+        raw_rain_total = _u16(fields[3])
+        if raw_rain_total is not None:
+            self.rain_total = raw_rain_total / 100.0
+
+        raw_bp = _u16(fields[4])
+        if raw_bp is not None:
+            self.barometric_pressure = raw_bp / 10.0
+
+        # In the !! format, humidity is at F5 (not F8 as in $ULTW)
+        raw_hum = _u16(fields[5])
+        if raw_hum is not None:
+            self.outdoor_humidity = raw_hum / 10.0
+
+        # fields[6–11] meanings unclear; not decoded
 
         return True
 
