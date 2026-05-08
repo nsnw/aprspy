@@ -5,6 +5,7 @@ import logging
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
+from ..warnings import ParseWarningCode, ParseWarningSeverity
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -57,11 +58,28 @@ class ObjectPacket(PositionPacket):
         else:
             indicator_idx = None
 
+        nonstandard_indicator = False
+        if indicator_idx is None and len(self._info) >= 17:
+            # Some firmware uses non-standard characters as the live/killed indicator.
+            # Accept any character at position 9 if what follows looks like a valid
+            # timestamp (6 digits + h/z//).
+            if re.match(r'\d{6}[hz/]', self._info[10:17]):
+                indicator_idx = 9
+                nonstandard_indicator = True
+
         if indicator_idx is None:
             raise ParseError("No live/killed indicator found in object packet", self)
 
         self.object_name = self._info[:indicator_idx].rstrip()
-        self.alive = self._info[indicator_idx] == '*'
+        if nonstandard_indicator:
+            self.alive = True
+            self._warn(
+                ParseWarningCode.OBJECT_NONSTANDARD_INDICATOR,
+                f"Non-standard live/killed indicator {self._info[9:10]!r}; treating as live",
+                ParseWarningSeverity.LENIENT,
+            )
+        else:
+            self.alive = self._info[indicator_idx] == '*'
         logger.debug(f"Object name: {self.object_name!r}, alive: {self.alive}")
 
         # 7-char timestamp immediately follows the indicator
