@@ -333,8 +333,10 @@ class PositionPacket(GenericPacket):
         if len(data) < 13:
             raise ValueError("Compressed position data must be at least 13 characters")
 
-        # Symbol table must be /, \, 0-9, or A-Z (uppercase overlay); lowercase = not a position
-        if data[0] not in '/\\' and not data[0].isdigit() and not data[0].isupper():
+        # Symbol table must be /, \, 0-9, or A-Z (uppercase overlay).
+        # Accept lowercase letters too — some firmware (e.g. DigiPi) uses a-z as non-standard
+        # overlays; _parse_compressed() emits a LENIENT warning for these.
+        if data[0] not in '/\\' and not data[0].isdigit() and not data[0].isalpha():
             raise ValueError("Invalid symbol table identifier for compressed position: {!r}".format(data[0]))
 
         logger.debug("Compressed lat/lng: {}".format(data))
@@ -538,6 +540,10 @@ class PositionPacket(GenericPacket):
 
         self.compressed = True
         self.symbol_table = data[0]
+        if data[0].islower():
+            self._warn(ParseWarningCode.POSITION_LOWERCASE_OVERLAY,
+                       f"Non-standard lowercase overlay {data[0]!r} in compressed position",
+                       ParseWarningSeverity.LENIENT)
         self.symbol_id = data[9]
         self.ambiguity = 0
         self.comment = data[13:] if len(data) > 13 else None

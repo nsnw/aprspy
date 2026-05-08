@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 #
 # Field units are inferred from context; treat parsed values as best-effort.
 
+_ULTW_MISSING = '----'
+
 
 def _signed_byte(hex2: str) -> int | None:
     """Parse 2 hex chars as a signed byte (-128..127)."""
@@ -37,6 +39,27 @@ def _unsigned_byte(hex2: str) -> int | None:
 
 def _unsigned_word(hex4: str) -> int | None:
     """Parse 4 hex chars as an unsigned 16-bit word (0..65535)."""
+    try:
+        return int(hex4, 16)
+    except ValueError:
+        return None
+
+
+def _signed_word(hex4: str) -> int | None:
+    """Parse 4 hex chars as a signed 16-bit word (-32768..32767); '----' → None."""
+    if hex4 == _ULTW_MISSING:
+        return None
+    try:
+        v = int(hex4, 16)
+        return v if v < 32768 else v - 65536
+    except ValueError:
+        return None
+
+
+def _u16(hex4: str) -> int | None:
+    """Parse 4 hex chars as unsigned 16-bit word; '----' → None."""
+    if hex4 == _ULTW_MISSING:
+        return None
     try:
         return int(hex4, 16)
     except ValueError:
@@ -137,3 +160,174 @@ class UltimeterPacket(GenericPacket):
         if self.source:
             return f"<UltimeterPacket: {self.source}>"
         return "<UltimeterPacket>"
+
+
+class Ultimeter2000Packet(GenericPacket):
+    """
+    Class to represent Peet Bros Ultimeter 2000 weather packets.
+
+    DTI '$', info field starts with 'ULTW'.
+
+    Info field format: 'ULTW' followed by 52 hex characters (13 × 4-char fields).
+    '----' indicates a missing/unavailable sensor reading.
+
+    Field map (0-indexed, each field 4 hex chars):
+      F0  wind_speed_peak       uint16  0.1 mph
+      F1  wind_direction        uint16  degrees (0–360)
+      F2  outdoor_temp          int16   0.1 °F
+      F3  rain_total            uint16  0.01 in (long-term accumulated)
+      F4  barometric_pressure   uint16  0.1 mbar
+      F5  pressure_delta        int16   0.1 mbar (change since last reading)
+      F6  [station model ID]    uint16  (per-station constant, not a measurement)
+      F7  [flags]               uint16  (typically 0x0001)
+      F8  outdoor_humidity      uint16  0.1 %  (may be '----')
+      F9  [unknown]             uint16
+      F10 wind_speed_avg        uint16  0.1 mph
+      F11 rain_today            uint16  0.01 in (since midnight)
+      F12 [unknown]             uint16
+    """
+
+    # Raw fields stored as properties with explicit units
+
+    @property
+    def wind_speed_peak(self) -> float | None:
+        """Peak wind speed in mph."""
+        return getattr(self, '_wind_speed_peak', None)
+
+    @wind_speed_peak.setter
+    def wind_speed_peak(self, value):
+        self._wind_speed_peak = value
+
+    @property
+    def wind_direction(self) -> int | None:
+        """Wind direction in degrees."""
+        return getattr(self, '_wind_direction', None)
+
+    @wind_direction.setter
+    def wind_direction(self, value):
+        self._wind_direction = value
+
+    @property
+    def outdoor_temp(self) -> float | None:
+        """Outdoor temperature in °F."""
+        return getattr(self, '_outdoor_temp', None)
+
+    @outdoor_temp.setter
+    def outdoor_temp(self, value):
+        self._outdoor_temp = value
+
+    @property
+    def rain_total(self) -> float | None:
+        """Long-term accumulated rain in inches."""
+        return getattr(self, '_rain_total', None)
+
+    @rain_total.setter
+    def rain_total(self, value):
+        self._rain_total = value
+
+    @property
+    def barometric_pressure(self) -> float | None:
+        """Barometric pressure in mbar."""
+        return getattr(self, '_barometric_pressure', None)
+
+    @barometric_pressure.setter
+    def barometric_pressure(self, value):
+        self._barometric_pressure = value
+
+    @property
+    def pressure_delta(self) -> float | None:
+        """Barometric pressure change since last reading, in mbar."""
+        return getattr(self, '_pressure_delta', None)
+
+    @pressure_delta.setter
+    def pressure_delta(self, value):
+        self._pressure_delta = value
+
+    @property
+    def outdoor_humidity(self) -> float | None:
+        """Outdoor relative humidity in percent."""
+        return getattr(self, '_outdoor_humidity', None)
+
+    @outdoor_humidity.setter
+    def outdoor_humidity(self, value):
+        self._outdoor_humidity = value
+
+    @property
+    def wind_speed_avg(self) -> float | None:
+        """Average/current wind speed in mph."""
+        return getattr(self, '_wind_speed_avg', None)
+
+    @wind_speed_avg.setter
+    def wind_speed_avg(self, value):
+        self._wind_speed_avg = value
+
+    @property
+    def rain_today(self) -> float | None:
+        """Rain since midnight in inches."""
+        return getattr(self, '_rain_today', None)
+
+    @rain_today.setter
+    def rain_today(self, value):
+        self._rain_today = value
+
+    def parse(self) -> bool:
+        if not self._info:
+            return True
+
+        # info starts with 'ULTW'; payload is the 52 hex chars after that
+        payload = self._info[4:]
+        if len(payload) < 52:
+            raise ParseError(
+                f"$ULTW payload too short (expected 52 hex chars, got {len(payload)})", self
+            )
+
+        fields = [payload[i:i + 4] for i in range(0, 52, 4)]
+
+        raw_peak = _u16(fields[0])
+        if raw_peak is not None:
+            self.wind_speed_peak = raw_peak / 10.0
+
+        raw_dir = _u16(fields[1])
+        if raw_dir is not None:
+            self.wind_direction = raw_dir
+
+        raw_temp = _signed_word(fields[2])
+        if raw_temp is not None:
+            self.outdoor_temp = raw_temp / 10.0
+
+        raw_rain_total = _u16(fields[3])
+        if raw_rain_total is not None:
+            self.rain_total = raw_rain_total / 100.0
+
+        raw_bp = _u16(fields[4])
+        if raw_bp is not None:
+            self.barometric_pressure = raw_bp / 10.0
+
+        raw_delta = _signed_word(fields[5])
+        if raw_delta is not None:
+            self.pressure_delta = raw_delta / 10.0
+
+        # fields[6] = station model ID, fields[7] = flags — not stored as measurements
+
+        raw_hum = _u16(fields[8])
+        if raw_hum is not None:
+            self.outdoor_humidity = raw_hum / 10.0
+
+        # fields[9] unknown — skip
+
+        raw_avg = _u16(fields[10])
+        if raw_avg is not None:
+            self.wind_speed_avg = raw_avg / 10.0
+
+        raw_rain_today = _u16(fields[11])
+        if raw_rain_today is not None:
+            self.rain_today = raw_rain_today / 100.0
+
+        # fields[12] unknown — skip
+
+        return True
+
+    def __repr__(self):
+        if self.source:
+            return f"<Ultimeter2000Packet: {self.source}>"
+        return "<Ultimeter2000Packet>"

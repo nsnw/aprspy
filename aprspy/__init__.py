@@ -28,7 +28,7 @@ from .packets.nmea import NMEAPacket
 from .packets.weather import WeatherPacket
 from .packets.third_party import ThirdPartyPacket
 from .packets.query import QueryPacket
-from .packets.ultimeter import UltimeterPacket
+from .packets.ultimeter import UltimeterPacket, Ultimeter2000Packet
 
 __version__ = "0.5.0"
 
@@ -53,6 +53,7 @@ _DOWNGRADE_CODE = {
     BeaconPacket:         ParseWarningCode.BEACON_PARSE_FAILED,
     QueryPacket:          ParseWarningCode.QUERY_PARSE_FAILED,
     UltimeterPacket:      ParseWarningCode.ULTIMETER_PARSE_FAILED,
+    Ultimeter2000Packet:  ParseWarningCode.ULTIMETER2000_PARSE_FAILED,
     UserDefinedPacket:    ParseWarningCode.USER_DEFINED_PARSE_FAILED,
 }
 
@@ -384,6 +385,11 @@ class APRS:
             packet_type = UserDefinedPacket
 
         # Unsupported packet types.
+        # Peet Bros Ultimeter 2000 uses DTI '$' but starts with 'ULTW' — intercept before NMEA.
+        elif data_type_id == '$' and info.startswith('ULTW'):
+            logger.debug("Packet is a Peet Bros Ultimeter 2000 weather packet")
+            packet_type = Ultimeter2000Packet
+
         # Check if the data type ID indicates a raw NMEA position report packet.
         elif cls.is_raw_nmea_position_report_data_type_id(data_type_id):
             logger.debug("Packet is a raw NMEA position report packet")

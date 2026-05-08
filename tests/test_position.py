@@ -289,3 +289,14 @@ def test_position_ambiguity():
     assert packet.ambiguity == 4
     assert packet.latitude == 49.0
     assert packet.longitude == -72.0
+
+
+def test_compressed_lowercase_overlay():
+    from aprspy.warnings import ParseWarningCode
+    # DigiPi sends lowercase overlay chars (e.g. 'b') in compressed position
+    p = APRS.parse_packet(
+        'KK4DLV-2>APDW18,KV3B-1,WIDE1*,qAO,N4CJR-1:!b:eXQ:sml#  ! KK4DLV WIDE1 DigiPi'
+    )
+    assert type(p) == PositionPacket
+    assert p.symbol_table == 'b'
+    assert any(w.code == ParseWarningCode.POSITION_LOWERCASE_OVERLAY for w in p.parse_warnings)

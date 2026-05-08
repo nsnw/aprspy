@@ -399,3 +399,13 @@ def test_generic_packet_downgrade_records_warning():
     p = APRS.parse_packet(r'XX1XX>APRS,TCPIP*,qAC,TEST:`!!!!!!!!', strict=False)
     assert isinstance(p, GenericPacket)
     assert any(w.code == ParseWarningCode.MICE_PARSE_FAILED for w in p.parse_warnings)
+
+
+def test_lowercase_destination_char_accepted():
+    # DigiPi and some other firmware uses lowercase in Mic-E destination; should parse leniently.
+    from aprspy.warnings import ParseWarningCode
+    from aprspy.packets.mice import MICEPacket
+    raw = r"W6BDS-9>c3TSTT,KF6ILA-10*,WIDE2-2,qAR,KN6RBP-10:`-a4o#Vk/`\"8g}_5"
+    p = APRS.parse_packet(raw)
+    assert isinstance(p, MICEPacket)
+    assert any(w.code == ParseWarningCode.MICE_INVALID_DEST_CHAR for w in p.parse_warnings)

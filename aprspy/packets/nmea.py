@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import pynmea2
@@ -54,12 +55,31 @@ class NMEAPacket(PositionPacket):
         idx = sentence.rfind('*')
         return sentence[:idx] if idx != -1 else sentence
 
+    @staticmethod
+    def _truncate_after_checksum(sentence: str) -> tuple[str, str]:
+        """Return (truncated_sentence, trailing_suffix).
+
+        Strips any data after the 2-char hex checksum (*XX). Some stations
+        append APRS path/comment suffixes (e.g. /W1) directly after the
+        NMEA checksum; pynmea2 rejects these.
+        """
+        m = re.search(r'(\*[0-9A-Fa-f]{2})(.+)$', sentence)
+        if m:
+            return sentence[:m.end(1)], m.group(2)
+        return sentence, ''
+
     def parse(self) -> bool:
         if not self._info:
             return True
 
         # Reconstruct the full NMEA sentence (data_type_id '$' was stripped)
         sentence = '$' + self._info
+
+        # Strip any trailing non-NMEA suffix after the *XX checksum
+        sentence, trailing = self._truncate_after_checksum(sentence)
+        if trailing:
+            self._warn(ParseWarningCode.NMEA_TRAILING_DATA,
+                       f"Trailing data after NMEA checksum stripped: {trailing!r}")
         self.nmea_sentence = sentence
 
         # pynmea2 always validates a checksum when one is present, regardless

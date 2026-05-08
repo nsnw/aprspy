@@ -52,6 +52,18 @@ class MICEPacket(PositionPacket):
         count = 0
         for i in destination[0:6]:
             count += 1
+            # Non-standard: some firmware outputs lowercase destination chars. Map to uppercase
+            # so the encoding ranges below still apply.
+            if i.islower():
+                _w = ParseWarning(
+                    code=ParseWarningCode.MICE_INVALID_DEST_CHAR,
+                    message="Lowercase character '{}' in Mic-E destination position {} "
+                            "(non-standard, treating as uppercase)".format(i, count)
+                )
+                logger.info(str(_w))
+                if _warnings is not None:
+                    _warnings.append(_w)
+                i = i.upper()
             if 48 <= ord(i) <= 57:
                 # 0-9 are used as-is
                 latitude += i
