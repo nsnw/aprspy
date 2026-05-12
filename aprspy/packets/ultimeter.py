@@ -293,12 +293,13 @@ class Ultimeter2000Packet(GenericPacket):
 
     def _parse_ultw(self) -> bool:
         payload = self._info[4:]
-        if len(payload) < 52:
+        if len(payload) < 20:
             raise ParseError(
-                f"$ULTW payload too short (expected 52 hex chars, got {len(payload)})", self
+                f"$ULTW payload too short (got {len(payload)} hex chars, need at least 20)", self
             )
 
-        fields = [payload[i:i + 4] for i in range(0, 52, 4)]
+        n_fields = len(payload) // 4
+        fields = [payload[i:i + 4] for i in range(0, n_fields * 4, 4)]
 
         raw_peak = _u16(fields[0])
         if raw_peak is not None:
@@ -320,25 +321,29 @@ class Ultimeter2000Packet(GenericPacket):
         if raw_bp is not None:
             self.barometric_pressure = raw_bp / 10.0
 
-        raw_delta = _signed_word(fields[5])
-        if raw_delta is not None:
-            self.pressure_delta = raw_delta / 10.0
+        if n_fields > 5:
+            raw_delta = _signed_word(fields[5])
+            if raw_delta is not None:
+                self.pressure_delta = raw_delta / 10.0
 
         # fields[6] = station model ID, fields[7] = flags — not stored as measurements
 
-        raw_hum = _u16(fields[8])
-        if raw_hum is not None:
-            self.outdoor_humidity = raw_hum / 10.0
+        if n_fields > 8:
+            raw_hum = _u16(fields[8])
+            if raw_hum is not None:
+                self.outdoor_humidity = raw_hum / 10.0
 
         # fields[9] unknown — skip
 
-        raw_avg = _u16(fields[10])
-        if raw_avg is not None:
-            self.wind_speed_avg = raw_avg / 10.0
+        if n_fields > 10:
+            raw_avg = _u16(fields[10])
+            if raw_avg is not None:
+                self.wind_speed_avg = raw_avg / 10.0
 
-        raw_rain_today = _u16(fields[11])
-        if raw_rain_today is not None:
-            self.rain_today = raw_rain_today / 100.0
+        if n_fields > 11:
+            raw_rain_today = _u16(fields[11])
+            if raw_rain_today is not None:
+                self.rain_today = raw_rain_today / 100.0
 
         # fields[12] unknown — skip
 

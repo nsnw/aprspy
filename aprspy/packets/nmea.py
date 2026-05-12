@@ -125,8 +125,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPRMC: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPRMC: {e}", self)
 
         try:
             if msg.spd_over_grnd is not None:
@@ -157,8 +157,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPGGA: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPGGA: {e}", self)
 
         try:
             if msg.altitude is not None:
@@ -184,8 +184,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPGLL: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPGLL: {e}", self)
 
         try:
             if msg.timestamp:

@@ -512,7 +512,7 @@ class APRSUtils:
                     code=ParseWarningCode.TIMESTAMP_INVALID_TYPE,
                     message="{} is an invalid timestamp type, assuming zulu".format(timestamp_type)
                 )
-                logger.warning(str(_w))
+                logger.info(str(_w))
                 if _warnings is not None:
                     _warnings.append(_w)
                 timestamp_type = 'zulu'
@@ -542,14 +542,9 @@ class APRSUtils:
                         tzinfo=UTC
                     )
                 except ValueError as e:
-                    _w = ParseWarning(
-                        code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
-                        message="Error parsing timestamp '{}': {}".format(raw_timestamp, e)
+                    raise ParseError(
+                        "Invalid timestamp '{}': {}".format(raw_timestamp, e)
                     )
-                    logger.warning(str(_w))
-                    if _warnings is not None:
-                        _warnings.append(_w)
-                    return None, timestamp_type
 
                 # Check it's not in the future
                 if ts > utc:
@@ -571,19 +566,12 @@ class APRSUtils:
                         code=ParseWarningCode.TIMESTAMP_LOCAL_TIME,
                         message="Local time specified in timestamp, assuming UTC."
                     )
-                    logger.warning(str(_w))
+                    logger.info(str(_w))
                     if _warnings is not None:
                         _warnings.append(_w)
 
-                # Sometimes, 000000 is used to indicate no timestamp is available
+                # 000000 is used by some devices to indicate no timestamp is available
                 if timestamp[0:6] == "000000":
-                    _w = ParseWarning(
-                        code=ParseWarningCode.TIMESTAMP_ALL_ZEROES,
-                        message="Timestamp specified but is set to all zeroes."
-                    )
-                    logger.warning(str(_w))
-                    if _warnings is not None:
-                        _warnings.append(_w)
                     return None, timestamp_type
 
                 # DDHHMM
@@ -618,28 +606,14 @@ class APRSUtils:
                                 second=alt_second,
                                 tzinfo=UTC
                             )
-                            _w = ParseWarning(
-                                code=ParseWarningCode.TIMESTAMP_FORMAT_FALLBACK,
-                                message="DDHHMM parse failed for '{}', interpreted as HHMMSS".format(
-                                    raw_timestamp),
-                                severity=ParseWarningSeverity.LENIENT
-                            )
-                            logger.info(str(_w))
-                            if _warnings is not None:
-                                _warnings.append(_w)
                             if ts > utc:
                                 ts -= timedelta(days=1)
                             return int(ts.timestamp()), 'hms'
                         except ValueError:
                             pass
-                    _w = ParseWarning(
-                        code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
-                        message="Error parsing timestamp '{}': {}".format(timestamp, e)
+                    raise ParseError(
+                        "Invalid timestamp '{}': {}".format(raw_timestamp, e)
                     )
-                    logger.warning(str(_w))
-                    if _warnings is not None:
-                        _warnings.append(_w)
-                    return None, timestamp_type
 
                 # Check it's not in the future
                 if ts > utc:
@@ -672,14 +646,9 @@ class APRSUtils:
                                 tzinfo=UTC
                             )
                     except ValueError as e:
-                        _w = ParseWarning(
-                            code=ParseWarningCode.TIMESTAMP_PARSE_ERROR,
-                            message="Error parsing timestamp '{}': {}".format(timestamp, e)
+                        raise ParseError(
+                            "Invalid timestamp '{}': {}".format(raw_timestamp, e)
                         )
-                        logger.warning(str(_w))
-                        if _warnings is not None:
-                            _warnings.append(_w)
-                        return None, timestamp_type
 
                 # Convert to seconds
                 logger.debug("Timestamp is {}".format(ts.strftime("%Y%m%d%H%M%S")))

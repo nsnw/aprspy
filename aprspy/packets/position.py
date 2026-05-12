@@ -540,10 +540,6 @@ class PositionPacket(GenericPacket):
 
         self.compressed = True
         self.symbol_table = data[0]
-        if data[0].islower():
-            self._warn(ParseWarningCode.POSITION_LOWERCASE_OVERLAY,
-                       f"Non-standard lowercase overlay {data[0]!r} in compressed position",
-                       ParseWarningSeverity.LENIENT)
         self.symbol_id = data[9]
         self.ambiguity = 0
         self.comment = data[13:] if len(data) > 13 else None

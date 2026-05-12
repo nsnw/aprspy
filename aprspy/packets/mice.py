@@ -94,7 +94,7 @@ class MICEPacket(PositionPacket):
                     message="Custom message character '{}' in Mic-E destination position {} "
                             "(spec-invalid, treating as standard)".format(i, count)
                 )
-                logger.warning(str(_w))
+                logger.info(str(_w))
                 if _warnings is not None:
                     _warnings.append(_w)
 

@@ -501,11 +501,25 @@ class APRS:
             info=info
         )
 
+        # For beacon packets (destination-dispatched) and genuinely unrecognised packets
+        # (GenericPacket), the regex split treated the first info char as data_type_id
+        # but there is no meaningful DTI. Reconstruct the full info and clear data_type_id
+        # so callers can distinguish "parsed typed packet" from "unknown/freeform".
+        # Note: the DOWNGRADE path creates its own GenericPacket after except ParseError,
+        # so downgraded packets retain their original data_type_id unaffected.
+        if packet_type in (BeaconPacket, GenericPacket):
+            # Only prepend to info if the char is printable ASCII — it's part of the
+            # freeform content (e.g. 'U' in 'UIDIGI 1.9'). Control chars, non-ASCII,
+            # and the Unicode replacement character are garbage and are discarded.
+            if data_type_id and 0x20 <= ord(data_type_id) <= 0x7e:
+                info = data_type_id + info
+            data_type_id = None
+
         # For X1J-style offset packets, get_packet_type rewrites info and data_type_id locally
         # but doesn't return them. Replicate that here so the packet is constructed correctly.
         # Guard with is_position_data_type_id to avoid misidentifying compressed packets whose
         # base-91 encoded data happens to contain '!'.
-        if (packet_type is PositionPacket
+        elif (packet_type is PositionPacket
                 and not cls.is_position_data_type_id(data_type_id)
                 and cls.is_position_info_with_offset(info)):
             info = data_type_id + info
@@ -523,11 +537,6 @@ class APRS:
 
         try:
             packet.parse()
-            if isinstance(packet, UserDefinedPacket):
-                packet._warn(
-                    ParseWarningCode.USER_DEFINED_UNSUPPORTED,
-                    "User-defined packets are not fully supported."
-                )
         except ParseError as e:
             if strict:
                 raise

@@ -81,14 +81,6 @@ class MessagePacket(GenericPacket):
             # Clear the message
             self._message = None
         elif type(value) is str:
-            if len(value) > 67:
-                # The maximum length of a message is 67 characters (C14 P71)
-                self._warn(
-                    ParseWarningCode.MESSAGE_TOO_LONG,
-                    "Message length should not be longer than 67 characters ({} given)".format(
-                        len(value)
-                    )
-                )
             self._message = value
         else:
             raise TypeError("Message must be of type 'str' ({} given)".format(type(value)))

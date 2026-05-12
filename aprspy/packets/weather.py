@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..exceptions import ParseError
-from ..warnings import ParseWarning, ParseWarningCode
+from ..warnings import ParseWarning
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -202,8 +202,6 @@ class WeatherPacket(PositionPacket):
         # Parse timestamp: MMDDHHMM (8 chars)
         ts_str = self._info[0:8]
         if ts_str == '00000000':
-            self._warn(ParseWarningCode.TIMESTAMP_ALL_ZEROES,
-                       "Timestamp specified but is set to all zeroes.")
             self.timestamp = None
             self.timestamp_type = 'positionless'
         else:
