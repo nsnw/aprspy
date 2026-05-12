@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import logging
+import re
 from datetime import datetime, timezone
 
 import pynmea2
 
 from ..exceptions import ParseError
+from ..warnings import ParseWarningCode
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -53,12 +55,31 @@ class NMEAPacket(PositionPacket):
         idx = sentence.rfind('*')
         return sentence[:idx] if idx != -1 else sentence
 
+    @staticmethod
+    def _truncate_after_checksum(sentence: str) -> tuple[str, str]:
+        """Return (truncated_sentence, trailing_suffix).
+
+        Strips any data after the 2-char hex checksum (*XX). Some stations
+        append APRS path/comment suffixes (e.g. /W1) directly after the
+        NMEA checksum; pynmea2 rejects these.
+        """
+        m = re.search(r'(\*[0-9A-Fa-f]{2})(.+)$', sentence)
+        if m:
+            return sentence[:m.end(1)], m.group(2)
+        return sentence, ''
+
     def parse(self) -> bool:
         if not self._info:
             return True
 
         # Reconstruct the full NMEA sentence (data_type_id '$' was stripped)
         sentence = '$' + self._info
+
+        # Strip any trailing non-NMEA suffix after the *XX checksum
+        sentence, trailing = self._truncate_after_checksum(sentence)
+        if trailing:
+            self._warn(ParseWarningCode.NMEA_TRAILING_DATA,
+                       f"Trailing data after NMEA checksum stripped: {trailing!r}")
         self.nmea_sentence = sentence
 
         # pynmea2 always validates a checksum when one is present, regardless
@@ -69,7 +90,7 @@ class NMEAPacket(PositionPacket):
             self.checksum_valid = True
         except pynmea2.ChecksumError:
             self.checksum_valid = False
-            logger.warning(f"NMEA checksum invalid for: {sentence!r}")
+            self._warn(ParseWarningCode.NMEA_CHECKSUM_INVALID, f"NMEA checksum invalid for: {sentence!r}")
             # Re-parse without the checksum so we can still extract data
             try:
                 msg = pynmea2.parse(self._strip_checksum(sentence))
@@ -104,8 +125,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPRMC: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPRMC: {e}", self)
 
         try:
             if msg.spd_over_grnd is not None:
@@ -136,8 +157,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPGGA: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPGGA: {e}", self)
 
         try:
             if msg.altitude is not None:
@@ -163,8 +184,8 @@ class NMEAPacket(PositionPacket):
         try:
             self.latitude = msg.latitude
             self.longitude = msg.longitude
-        except AttributeError as e:
-            raise ParseError(f"Missing position in GPGLL: {e}", self)
+        except (AttributeError, ValueError) as e:
+            raise ParseError(f"Invalid position in GPGLL: {e}", self)
 
         try:
             if msg.timestamp:

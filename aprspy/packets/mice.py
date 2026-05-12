@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import logging
+import re
 
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
+from ..warnings import ParseWarning, ParseWarningCode
 from .position import PositionPacket
 
 # Set up logging
@@ -24,7 +26,7 @@ class MICEPacket(PositionPacket):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _decode_latitude(destination: str) -> Tuple[float, int, bool, str, int, int, int, bool]:
+    def _decode_latitude(destination: str, _warnings: list = None) -> Tuple[float, int, bool, str, int, int, int, bool]:
         """
         Decode the latitude.
 
@@ -40,7 +42,6 @@ class MICEPacket(PositionPacket):
         latitude = ""
         north_south = ""
         east_west = ""
-        # TODO - handle status types
         message_a = ""
         message_b = ""
         message_c = ""
@@ -48,10 +49,21 @@ class MICEPacket(PositionPacket):
         lng_offset = False
 
         # Iterate over each character of the destination address
-        # TODO - A-K not used for 4-6
         count = 0
         for i in destination[0:6]:
             count += 1
+            # Non-standard: some firmware outputs lowercase destination chars. Map to uppercase
+            # so the encoding ranges below still apply.
+            if i.islower():
+                _w = ParseWarning(
+                    code=ParseWarningCode.MICE_INVALID_DEST_CHAR,
+                    message="Lowercase character '{}' in Mic-E destination position {} "
+                            "(non-standard, treating as uppercase)".format(i, count)
+                )
+                logger.info(str(_w))
+                if _warnings is not None:
+                    _warnings.append(_w)
+                i = i.upper()
             if 48 <= ord(i) <= 57:
                 # 0-9 are used as-is
                 latitude += i
@@ -72,6 +84,19 @@ class MICEPacket(PositionPacket):
                     enc_set = 3
             else:
                 raise ParseError("Unexpected character in Mic-E destination field")
+
+            # A-J are only valid in positions 1-3 (message bits); K is allowed everywhere as ambiguity.
+            # In positions 4-6, A-J is spec-invalid but produces the same result as P-Z (enc_set 3),
+            # so we warn and continue rather than rejecting the packet.
+            if 65 <= ord(i) <= 74 and count > 3:
+                _w = ParseWarning(
+                    code=ParseWarningCode.MICE_INVALID_DEST_CHAR,
+                    message="Custom message character '{}' in Mic-E destination position {} "
+                            "(spec-invalid, treating as standard)".format(i, count)
+                )
+                logger.info(str(_w))
+                if _warnings is not None:
+                    _warnings.append(_w)
 
             if count == 1:
                 # The first field is changed depending on the message a-bit
@@ -230,20 +255,15 @@ class MICEPacket(PositionPacket):
         except IndexError:
             raise ParseError("Couldn't parse speed/course in Mic-E packet")
 
-        # The speed is in knots, and is obtained by multiplying sp by 10, and adding the quotient of
-        # dc divided by 10
-        # TODO - handle other speed encoding scheme (see C10 P50)
+        # sp encodes the hundreds of speed; dc upper digit encodes units; dc lower digit encodes
+        # hundreds of course; se encodes the remaining course degrees.
         speed = (sp * 10) + int(dc / 10)
-
-        # The course is in degrees, and is obtained by multiplying the remainder of dc divided by 10
-        # by 100, and then adding the value of se
         course = ((dc % 10) * 100) + se
 
-        # If the speed value is greater than or equal to 800, subtract 800 from it
+        # Some devices encode 0 knots as sp=80 (raw), giving speed=800 here; subtracting 800 maps
+        # it back to 0. The same wrap-around applies to course values >= 400.
         if speed >= 800:
             speed -= 800
-
-        # If the course value is greater than or equal to 400, subtract 400 from it
         if course >= 400:
             course -= 400
 
@@ -251,9 +271,148 @@ class MICEPacket(PositionPacket):
 
         return (speed, course)
 
+    # Device prefix characters inserted at the start of status text (APRS 1.2 C10).
+    # > and ] are Kenwood (handheld/mobile); ` and ' are used by other manufacturers
+    # (messaging-capable and non-messaging respectively).
+    _DEVICE_PREFIXES = frozenset({'>', ']', '`', "'"})
+
+    # Device suffix → model name, sourced from https://github.com/aprsorg/aprs-deviceid
+    # Check 2-char suffixes before 1-char to avoid partial matches.
+    _DEVICE_SUFFIX_MAP = {
+        # Yaesu (all use _ prefix)
+        '_ ': 'Yaesu VX-8',
+        '_"': 'Yaesu FTM-350',
+        '_#': 'Yaesu VX-8G',
+        '_$': 'Yaesu FT1D',
+        '_(': 'Yaesu FT2D',
+        '_)': 'Yaesu FTM-100D',
+        '_0': 'Yaesu FT3D',
+        '_1': 'Yaesu FTM-300D',
+        '_2': 'Yaesu FTM-200D',
+        '_3': 'Yaesu FT5D',
+        '_4': 'Yaesu FTM-500D',
+        '_5': 'Yaesu FTM-510D',
+        '_6': 'Yaesu FTX-1',
+        '_7': 'Yaesu FTM-310D',
+        '_%': 'Yaesu FTM-400DR',
+        # Anytone
+        '(5': 'Anytone D578UV',
+        '(8': 'Anytone D878UV',
+        # Byonics
+        '|3': 'Byonics TinyTrak3',
+        '|4': 'Byonics TinyTrak4',
+        # Others
+        '^v': 'HinzTec anyfrog',
+        '*v': 'KissOZ Tracker',
+        '*9': 'NOR AVRT9',
+        ':2': 'SQ8L VP-Tracker',
+        ' X': 'SainSonic AP510',
+        '[1': 'APRSdroid',
+        # Kenwood (single char; listed last so 2-char check takes priority)
+        '=': 'Kenwood TH-D72/TM-D710',
+        '^': 'Kenwood TH-D74',
+        '&': 'Kenwood TH-D75',
+    }
+
+    _STANDARD_MESSAGE_TYPES = {
+        (1, 1, 1): "M0: Off Duty",
+        (1, 1, 0): "M1: En Route",
+        (1, 0, 1): "M2: In Service",
+        (1, 0, 0): "M3: Returning",
+        (0, 1, 1): "M4: Committed",
+        (0, 1, 0): "M5: Special",
+        (0, 0, 1): "M6: Priority",
+        (0, 0, 0): "Emergency",
+    }
+
+    _CUSTOM_MESSAGE_TYPES = {
+        (1, 1, 1): "Custom-0",
+        (1, 1, 0): "Custom-1",
+        (1, 0, 1): "Custom-2",
+        (1, 0, 0): "Custom-3",
+        (0, 1, 1): "Custom-4",
+        (0, 1, 0): "Custom-5",
+        (0, 0, 1): "Custom-6",
+        (0, 0, 0): "Emergency",
+    }
+
     @property
     def message_bits(self) -> dict | None:
+        """Raw Mic-E message bits decoded from the destination field.
+
+        Returns a dict with keys ``a``, ``b``, ``c`` (each 0 or 1) and ``custom`` (bool),
+        or ``None`` if not yet parsed.
+        """
         return getattr(self, '_message_bits', None)
+
+    @property
+    def message_type(self) -> str | None:
+        """Human-readable Mic-E message type derived from the message bits.
+
+        Standard types: ``"M0: Off Duty"``, ``"M1: En Route"``, etc., or ``"Emergency"``.
+        Custom types: ``"Custom-0"`` through ``"Custom-6"``, or ``"Emergency"``.
+        Returns ``None`` if message bits have not been parsed.
+        """
+        bits = self.message_bits
+        if bits is None:
+            return None
+        key = (bits["a"], bits["b"], bits["c"])
+        table = self._CUSTOM_MESSAGE_TYPES if bits["custom"] else self._STANDARD_MESSAGE_TYPES
+        return table.get(key)
+
+    @staticmethod
+    def _decode_telemetry(info: str, status_offset: int = 8) -> Tuple[dict, str]:
+        """
+        Decode Mic-E telemetry data.
+
+        Returns a (telemetry, comment) tuple. Each analog channel value and the digital byte are
+        encoded as a single byte with offset 28. Up to 5 analog channels and 1 digital byte are
+        read; any remaining bytes become the comment.
+
+        Two separator bytes are defined (APRS 1.01 C10 P54):
+        - ASCII 44 (','): type 1
+        - ASCII 29 (GS): type 2
+
+        Both use the same single-byte offset-28 encoding.
+        """
+        data = info[status_offset + 1:]
+        analog: List[int] = []
+        for i in range(5):
+            if i >= len(data):
+                break
+            analog.append(ord(data[i]) - 28)
+        consumed = len(analog)
+        digital: int = 0
+        if consumed < len(data):
+            digital = ord(data[consumed]) - 28
+            consumed += 1
+        return {"analog": analog, "digital": digital}, data[consumed:]
+
+    @property
+    def telemetry(self) -> Optional[dict]:
+        """Telemetry data encoded in the status text, or ``None`` if absent.
+
+        Returns a dict with keys ``analog`` (list of up to 5 int values) and
+        ``digital`` (int), following APRS 1.01 C10 P54.
+        """
+        return getattr(self, '_telemetry', None)
+
+    @property
+    def frequency(self) -> Optional[float]:
+        """Operating frequency in MHz parsed from the comment, or ``None`` if absent.
+
+        Encoded as ``FFF.FFFMHz`` at the start of the status text per APRS 1.2 C18.
+        """
+        return getattr(self, '_frequency', None)
+
+    @property
+    def device_id(self) -> Optional[str]:
+        """Device model name identified from the status text suffix, or ``None`` if unknown.
+
+        Sourced from the `aprs-deviceid <https://github.com/aprsorg/aprs-deviceid>`_ database.
+        Examples: ``"Kenwood TH-D74"``, ``"Yaesu FT3D"``, ``"Anytone D878UV"``.
+        """
+        return getattr(self, '_device_id', None)
 
     def parse(self) -> bool:
         """
@@ -265,7 +424,7 @@ class MICEPacket(PositionPacket):
         # Decode the latitude, ambiguity, the longitude offset, the east/west direction and the
         # message bits
         (self.latitude, self.ambiguity, lng_offset, east_west, message_a, message_b, message_c,
-         message_custom) = self._decode_latitude(str(self.destination))
+         message_custom) = self._decode_latitude(str(self.destination), self._parse_warnings)
 
         self._message_bits = {
             "a": message_a,
@@ -294,23 +453,57 @@ class MICEPacket(PositionPacket):
         except IndexError:
             raise ParseError("Missing symbol table", self)
 
-        # Next comes either the status text or telemetry (C10 P54)
-        # Telemetry is indicated by setting the first character of the status field to dec 44
-        # (a ',') or the unprintable 29.
-        if len(self._info) >= 10:
-            if ord(self._info[8]) == 44 or ord(self._info[8]) == 29:
+        # Detect a dropped non-printable SE+28 byte: if the symbol table is not a valid APRS
+        # table identifier (/ \ or an alphanumeric overlay character), a gateway likely stripped
+        # the SE+28 course byte because it was a non-printable control character. Recover by
+        # reading the symbol one position earlier and adjusting all subsequent offsets.
+        _status_offset = 8
+        if self.symbol_table not in '/\\' and not self.symbol_table.isalnum():
+            logger.debug(
+                "Symbol table '{}' is not a valid APRS table ID; "
+                "SE+28 byte was likely stripped by a gateway".format(self.symbol_table)
+            )
+            try:
+                self.symbol_id = self._info[5]
+                self.symbol_table = self._info[6]
+            except IndexError:
+                raise ParseError("Missing symbol ID", self)
+            _status_offset = 7
+            # Recompute course using only SP and DC bytes; SE is gone
+            dc = ord(self._info[4]) - 28
+            course = (dc % 10) * 100
+            if course >= 400:
+                course -= 400
+            self.course = course
+            logger.debug(
+                "Symbol ID is {} symbol table is {} (shifted)".format(
+                    self.symbol_id, self.symbol_table)
+            )
+
+        # Next comes either telemetry or status text (C10 P54).
+        # The byte at _status_offset is either a telemetry flag (ASCII 44 or 29) or the start of
+        # status text, which may open with a device prefix character (> or ]).
+        if len(self._info) > _status_offset:
+            status_char = self._info[_status_offset]
+
+            if ord(status_char) in (44, 29):
                 logger.debug("Packet contains telemetry data")
-                # TODO
+                self._telemetry, self.comment = self._decode_telemetry(self._info, _status_offset)
             else:
                 logger.debug("Packet contains status text")
-                status_text = self._info[9:]
+
+                # Strip device prefix (APRS 1.2 C10: Kenwood inserts > or ] before status text)
+                text_start = _status_offset
+                if status_char in self._DEVICE_PREFIXES:
+                    text_start += 1
+
+                status_text = self._info[text_start:]
 
                 # The status text can contain an altitude value (C10 P55)
                 # It's indicated by the first 4 characters, with the 4th being a '}'
                 if len(status_text) >= 4 and status_text[3] == "}":
                     logger.debug("Status text contains altitude data")
 
-                    # Decode the altitude
                     altitude = (
                         (ord(status_text[0])-33) * 91**2 +
                         (ord(status_text[1])-33) * 91 +
@@ -319,13 +512,33 @@ class MICEPacket(PositionPacket):
 
                     self.altitude = altitude
                     logger.debug("Altitude is {}m".format(altitude))
-
-                    # The remainder is the comment
-                    self.comment = status_text[4:]
-                    logger.debug("Comment is {}".format(self.comment))
-
+                    comment = status_text[4:]
                 else:
-                    self.comment = status_text
+                    comment = status_text
+
+                # Strip old Mic-E comment terminator (0x0D) used by some devices
+                comment = comment.rstrip('\r')
+
+                # Strip device suffix (APRS 1.2 C10: manufacturer model identifier)
+                suffix2 = comment[-2:] if len(comment) >= 2 else ''
+                suffix1 = comment[-1] if comment else ''
+                if suffix2 in self._DEVICE_SUFFIX_MAP:
+                    self._device_id = self._DEVICE_SUFFIX_MAP[suffix2]
+                    comment = comment[:-2]
+                elif suffix1 in self._DEVICE_SUFFIX_MAP:
+                    self._device_id = self._DEVICE_SUFFIX_MAP[suffix1]
+                    comment = comment[:-1]
+
+                # Extract frequency specification from start of comment (APRS 1.2 C18).
+                # Format is FFF.FFFMHz — exactly 10 bytes. An optional space delimiter follows.
+                freq_match = re.match(r'^(\d{3}\.\d{3})[Mm][Hh][Zz] ?', comment)
+                if freq_match:
+                    self._frequency = float(freq_match.group(1))
+                    comment = comment[freq_match.end():]
+                    logger.debug("Frequency is {} MHz".format(self._frequency))
+
+                self.comment = comment
+                logger.debug("Comment is {}".format(self.comment))
         else:
             logger.debug("Packet contains no further information.")
 

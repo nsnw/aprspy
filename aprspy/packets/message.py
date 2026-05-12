@@ -4,6 +4,7 @@ import re
 import logging
 
 from ..exceptions import ParseError, GenerateError
+from ..warnings import ParseWarningCode
 from .generic import GenericPacket
 
 # Set up logging
@@ -80,13 +81,6 @@ class MessagePacket(GenericPacket):
             # Clear the message
             self._message = None
         elif type(value) is str:
-            if len(value) > 67:
-                # The maximum length of a message is 67 characters (C14 P71)
-                logger.warning(
-                    "Message length should not be longer than 67 characters ({} given)".format(
-                        len(value)
-                    )
-                )
             self._message = value
         else:
             raise TypeError("Message must be of type 'str' ({} given)".format(type(value)))
@@ -193,11 +187,21 @@ class MessagePacket(GenericPacket):
         The parsed values are stored within the current object.
         """
 
+        if not self._info:
+            return True
+
         # The spec requires ':' at position 9 (9-char addressee), but real-world senders sometimes
         # omit the space padding. Accept ':' anywhere in positions 1–10.
         sep = self._info.find(':')
         if sep < 1 or sep > 10:
-            raise ParseError("Invalid message packet (missing : in 9th position)", self)
+            # Fallback: some senders omit the ':' separator entirely and use a space instead.
+            space_sep = self._info.find(' ')
+            if 1 <= space_sep <= 9:
+                sep = space_sep
+                self._warn(ParseWarningCode.MESSAGE_MISSING_SEPARATOR,
+                           "Message addressee separator ':' missing; used space as fallback")
+            else:
+                raise ParseError("Invalid message packet (missing : in 9th position)", self)
 
         # Split the message into the addressee and the actual message
         addressee = self._info[:sep]
@@ -238,13 +242,24 @@ class MessagePacket(GenericPacket):
                     self.announcement_id = addressee[3]
                     logger.debug("Non-standard announcement: {}".format(addressee))
 
+            elif addressee[3:].rstrip() == "":
+                # BLN with no identifier (e.g. "BLN      ") — treat as unnumbered bulletin
+                logger.debug("Bulletin with no identifier: {}".format(addressee))
+
             else:
                 # Incorrectly-formatted bulletin
                 raise ParseError("Incorrectly-formatted bulletin: {}".format(addressee), self)
 
         if '{' in message:
-            # Check for a message ID
+            # Check for a message ID; some clients use {ID} with a } terminator
             message, message_id = message.split("{", maxsplit=1)
+            if '}' in message_id:
+                message_id = message_id[:message_id.index('}')]
+            # Some devices (e.g. Kenwood) append non-alphanumeric extensions after the ID
+            # (e.g. "1+[/`\"4F"). Truncate at the first non-alphanumeric character.
+            alnum_end = re.search(r'[^A-Za-z0-9]', message_id)
+            if alnum_end:
+                message_id = message_id[:alnum_end.start()]
             logger.debug("Message has message ID {}".format(message_id))
 
             # Message IDs must not be longer than 5 characters (C14 P71)
@@ -285,7 +300,7 @@ class MessagePacket(GenericPacket):
         else:
             raise GenerateError("No addressee, announcement or bulletin details", self)
 
-        if self.message:
+        if self.message is not None:
             info += ":{}".format(self.message)
         else:
             raise GenerateError("No message", self)

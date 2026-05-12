@@ -103,4 +103,4 @@ def test_compressed_comment(compressed):
 
 def test_invalid_packet():
     with pytest.raises((ParseError, AttributeError)):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:)AB!4903.50N/07201.75W>')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:)AB!4903.50N/07201.75W>', strict=True)

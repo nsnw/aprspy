@@ -89,4 +89,4 @@ def test_inner_weather_fields(weather_packet):
 
 def test_bad_inner_raises():
     with pytest.raises(ParseError):
-        APRS.parse_packet(RAW_BAD_INNER)
+        APRS.parse_packet(RAW_BAD_INNER, strict=True)

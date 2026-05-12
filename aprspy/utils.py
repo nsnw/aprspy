@@ -6,6 +6,7 @@ import math
 from datetime import datetime, timedelta, UTC
 from typing import Union, Tuple, Optional
 from .exceptions import ParseError
+from .warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -21,6 +22,18 @@ class APRSUtils:
     @staticmethod
     def _get_utc():
         return datetime.now(UTC)
+
+    @staticmethod
+    def apply_del_chars(s: str) -> str:
+        """Process DEL (\\x7f) as backspace: each DEL removes the preceding character."""
+        result = []
+        for ch in s:
+            if ch == '\x7f':
+                if result:
+                    result.pop()
+            else:
+                result.append(ch)
+        return ''.join(result)
 
     @staticmethod
     def decode_uncompressed_latitude(latitude: str) -> Tuple[Union[int, float], int]:
@@ -42,6 +55,11 @@ class APRSUtils:
         See also APRS 1.01 C6 P23.
         """
         logger.debug("Input latitude: {}".format(latitude))
+
+        # All-spaces placeholder (e.g. "    .  N") — position unknown
+        if (len(latitude) == 8 and latitude[4] == '.' and latitude[7] in 'NS'
+                and latitude[:4].replace(' ', '') == '' and latitude[5:7].replace(' ', '') == ''):
+            return None, 0
 
         # Regex match to catch any obviously-invalid latitudes
         if not re.match(r'^[0-9]{2}[\s0-9]{2}\.[\s0-9]{2}[NS]$', latitude):
@@ -238,6 +256,11 @@ class APRSUtils:
         logger.debug("Input longitude: {}, ambiguity: {}".format(
             longitude, ambiguity
         ))
+
+        # All-spaces placeholder (e.g. "     .  E") — position unknown
+        if (len(longitude) == 9 and longitude[5] == '.' and longitude[8] in 'EW'
+                and longitude[:5].replace(' ', '') == '' and longitude[6:8].replace(' ', '') == ''):
+            return None
 
         # Regex match to catch any obviously-invalid longitudes
         if not re.match(r'^[0-1][0-9]{2}[\s0-9]{2}\.[\s0-9]{2}[EW]$', longitude):
@@ -450,11 +473,15 @@ class APRSUtils:
         return lng
 
     @staticmethod
-    def decode_timestamp(raw_timestamp: str) -> datetime:
+    def decode_timestamp(raw_timestamp: str, _warnings: list = None,
+                         try_alternate_format: bool = False) -> datetime:
         """
         Decode a timestamp.
 
         :param str raw_timestamp: a string representing a timestamp
+        :param list _warnings: optional list to append warning messages to
+        :param bool try_alternate_format: if True, fall back to HHMMSS when DDHHMM
+            fails (e.g. for object packets where the spec doesn't restrict format)
 
         Timestamps can take a number of different forms:-
          * Zulu, identified with a trailing 'z', which refers to zulu time
@@ -481,7 +508,13 @@ class APRSUtils:
             else:
                 # This is against spec, but as usual with APRS a lot of clients violate this - so
                 # assume they're zulu time
-                logger.warning("{} is an invalid timestamp type, assuming zulu".format(timestamp_type))
+                _w = ParseWarning(
+                    code=ParseWarningCode.TIMESTAMP_INVALID_TYPE,
+                    message="{} is an invalid timestamp type, assuming zulu".format(timestamp_type)
+                )
+                logger.info(str(_w))
+                if _warnings is not None:
+                    _warnings.append(_w)
                 timestamp_type = 'zulu'
 
             # Get the current UTC ('zulu') time for comparison. Since timestamps in HHMMSS format
@@ -509,8 +542,9 @@ class APRSUtils:
                         tzinfo=UTC
                     )
                 except ValueError as e:
-                    logger.error("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
-                    raise ParseError("Error parsing timestamp '{}': {}".format(raw_timestamp, e))
+                    raise ParseError(
+                        "Invalid timestamp '{}': {}".format(raw_timestamp, e)
+                    )
 
                 # Check it's not in the future
                 if ts > utc:
@@ -528,11 +562,16 @@ class APRSUtils:
                     # timezone, it's impossible to work out. APRS 1.01 C6 P22 states "It is
                     # recommended that future APRS implementations only transmit zulu format on the
                     # air", so hopefully this shouldn't be a problem in reality.
-                    logger.info("Local time specified in timestamp, assuming UTC.")
+                    _w = ParseWarning(
+                        code=ParseWarningCode.TIMESTAMP_LOCAL_TIME,
+                        message="Local time specified in timestamp, assuming UTC."
+                    )
+                    logger.info(str(_w))
+                    if _warnings is not None:
+                        _warnings.append(_w)
 
-                # Sometimes, 000000 is used to indicate no timestamp is available
+                # 000000 is used by some devices to indicate no timestamp is available
                 if timestamp[0:6] == "000000":
-                    logger.warning("Timestamp specified but is set to all zeroes.")
                     return None, timestamp_type
 
                 # DDHHMM
@@ -552,8 +591,29 @@ class APRSUtils:
                         tzinfo=UTC
                     )
                 except ValueError as e:
-                    logger.warning("Error parsing timestamp '{}': {}".format(timestamp, e))
-                    raise ParseError("Error parsing timestamp '{}': {}".format(timestamp, e))
+                    if try_alternate_format:
+                        # Try interpreting the 6 digits as HHMMSS instead
+                        alt_hour = int(timestamp[0:2])
+                        alt_minute = int(timestamp[2:4])
+                        alt_second = int(timestamp[4:6])
+                        try:
+                            ts = datetime(
+                                year=utc.year,
+                                month=utc.month,
+                                day=utc.day,
+                                hour=alt_hour,
+                                minute=alt_minute,
+                                second=alt_second,
+                                tzinfo=UTC
+                            )
+                            if ts > utc:
+                                ts -= timedelta(days=1)
+                            return int(ts.timestamp()), 'hms'
+                        except ValueError:
+                            pass
+                    raise ParseError(
+                        "Invalid timestamp '{}': {}".format(raw_timestamp, e)
+                    )
 
                 # Check it's not in the future
                 if ts > utc:
@@ -561,28 +621,33 @@ class APRSUtils:
                     # The time is in the future, so go back a month
                     # timedelta doesn't support subtracting months, so here be
                     # dirty hacks.
-                    if 1 < ts.month <= 12:
-                        month = ts.month - 1
-                        ts = datetime(
-                            year=utc.year,
-                            month=month,
-                            day=day,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            tzinfo=UTC
-                        )
-                    elif ts.month == 1:
-                        year = ts.year - 1
-                        month = 12
-                        ts = datetime(
-                            year=year,
-                            month=month,
-                            day=day,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            tzinfo=UTC
+                    try:
+                        if 1 < ts.month <= 12:
+                            month = ts.month - 1
+                            ts = datetime(
+                                year=utc.year,
+                                month=month,
+                                day=day,
+                                hour=hour,
+                                minute=minute,
+                                second=0,
+                                tzinfo=UTC
+                            )
+                        elif ts.month == 1:
+                            year = ts.year - 1
+                            month = 12
+                            ts = datetime(
+                                year=year,
+                                month=month,
+                                day=day,
+                                hour=hour,
+                                minute=minute,
+                                second=0,
+                                tzinfo=UTC
+                            )
+                    except ValueError as e:
+                        raise ParseError(
+                            "Invalid timestamp '{}': {}".format(raw_timestamp, e)
                         )
 
                 # Convert to seconds

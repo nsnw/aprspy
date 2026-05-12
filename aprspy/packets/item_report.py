@@ -41,8 +41,8 @@ class ItemReportPacket(PositionPacket):
         if not self._info:
             return True
 
-        # Item name is 3-9 chars, terminated by '!' (live) or '_' (killed)
-        m = re.match(r'^([^!_]{3,9})([!_])(.*)$', self._info)
+        # Item name is 3-9 chars per spec, but senders occasionally use 10.
+        m = re.match(r'^([^!_]{3,10})([!_])(.*)$', self._info)
         if not m:
             raise ParseError("Could not parse item name and status", self)
 
@@ -55,10 +55,7 @@ class ItemReportPacket(PositionPacket):
         if not data:
             raise ParseError("Missing position data in item report", self)
 
-        if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
-            self._parse_uncompressed(data)
-        else:
-            self._parse_compressed(data)
+        self._parse_position_data(data)
 
         return True
 

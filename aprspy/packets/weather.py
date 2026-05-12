@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..exceptions import ParseError
+from ..warnings import ParseWarning
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -200,16 +201,20 @@ class WeatherPacket(PositionPacket):
 
         # Parse timestamp: MMDDHHMM (8 chars)
         ts_str = self._info[0:8]
-        try:
-            month = int(ts_str[0:2])
-            day = int(ts_str[2:4])
-            hour = int(ts_str[4:6])
-            minute = int(ts_str[6:8])
-            year = datetime.now(timezone.utc).year
-            self.timestamp = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+        if ts_str == '00000000':
+            self.timestamp = None
             self.timestamp_type = 'positionless'
-        except ValueError as e:
-            raise ParseError(f"Invalid timestamp in weather packet: {e}", self)
+        else:
+            try:
+                month = int(ts_str[0:2])
+                day = int(ts_str[2:4])
+                hour = int(ts_str[4:6])
+                minute = int(ts_str[6:8])
+                year = datetime.now(timezone.utc).year
+                self.timestamp = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+                self.timestamp_type = 'positionless'
+            except ValueError as e:
+                raise ParseError(f"Invalid timestamp in weather packet: {e}", self)
 
         weather_data = self._info[8:]
         self._apply_weather(parse_weather_data(weather_data))

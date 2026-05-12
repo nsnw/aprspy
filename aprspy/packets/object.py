@@ -5,6 +5,7 @@ import logging
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
+from ..warnings import ParseWarningCode, ParseWarningSeverity
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -44,17 +45,41 @@ class ObjectPacket(PositionPacket):
 
         # Locate the live/killed indicator ('*' or '_'). The spec requires a
         # 9-char space-padded name, but many senders omit the padding, so we
-        # scan up to position 9 inclusive to find the indicator.
-        indicator_idx = next(
-            (i for i in range(min(10, len(self._info))) if self._info[i] in ('*', '_')),
-            None
-        )
+        # scan up to position 9 inclusive. Prefer '*' over '_' because '_' may
+        # legitimately appear in object names.
+        search_range = self._info[:min(11, len(self._info))]
+        star_idx = search_range.find('*')
+        kill_idx = search_range.find('_')
+
+        if star_idx != -1:
+            indicator_idx = star_idx
+        elif kill_idx != -1:
+            indicator_idx = kill_idx
+        else:
+            indicator_idx = None
+
+        nonstandard_indicator = False
+        if indicator_idx is None and len(self._info) >= 17:
+            # Some firmware uses non-standard characters as the live/killed indicator.
+            # Accept any character at position 9 if what follows looks like a valid
+            # timestamp (6 digits + h/z//).
+            if re.match(r'\d{6}[hz/]', self._info[10:17]):
+                indicator_idx = 9
+                nonstandard_indicator = True
 
         if indicator_idx is None:
             raise ParseError("No live/killed indicator found in object packet", self)
 
         self.object_name = self._info[:indicator_idx].rstrip()
-        self.alive = self._info[indicator_idx] == '*'
+        if nonstandard_indicator:
+            self.alive = True
+            self._warn(
+                ParseWarningCode.OBJECT_NONSTANDARD_INDICATOR,
+                f"Non-standard live/killed indicator {self._info[9:10]!r}; treating as live",
+                ParseWarningSeverity.LENIENT,
+            )
+        else:
+            self.alive = self._info[indicator_idx] == '*'
         logger.debug(f"Object name: {self.object_name!r}, alive: {self.alive}")
 
         # 7-char timestamp immediately follows the indicator
@@ -66,7 +91,7 @@ class ObjectPacket(PositionPacket):
 
         try:
             self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(
-                self._info[ts_start:ts_end]
+                self._info[ts_start:ts_end], self._parse_warnings, try_alternate_format=True
             )
         except ParseError as e:
             # Bad/placeholder timestamps (e.g. 111111z, 043516z with hour>23) are
@@ -77,7 +102,7 @@ class ObjectPacket(PositionPacket):
 
         logger.debug(f"Timestamp: {self.timestamp}")
 
-        data = self._info[ts_end:]
+        data = self._preprocess_position_data(self._info[ts_end:])
         if not data:
             return True
 

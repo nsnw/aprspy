@@ -7,6 +7,7 @@ from typing import List, Optional, Union
 from enum import Enum
 
 from .exceptions import ParseError
+from .warnings import ParseWarning, ParseWarningCode
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -157,7 +158,8 @@ class PathHop:
     """
     Class for describing a single path hop.
     """
-    def __init__(self, hop: Union[str, Station, QConstruct], used: bool = False):
+    def __init__(self, hop: Union[str, Station, QConstruct], used: bool = False,
+                 _warnings: list = None):
         """
         Create a new path hop.
 
@@ -175,11 +177,12 @@ class PathHop:
 
         # 'used' must be set first, since it can be updated if we're only passed a station with a
         # '*'
+        self._warnings = _warnings
         self.used = used
         self.hop = hop
 
     @property
-    def hop(self) -> Union[Station, QConstruct]:
+    def hop(self) -> Union[Station, QConstruct, str]:
         """Get the hop"""
         return self._hop
 
@@ -201,16 +204,37 @@ class PathHop:
                 try:
                     self._hop = QConstruct(value=value)
                 except (KeyError, ValueError):
-                    raise ParseError("Invalid q construct: {}".format(value))
+                    if self._warnings is not None:
+                        self._warnings.append(ParseWarning(
+                            code=ParseWarningCode.PATH_INVALID_Q_CONSTRUCT,
+                            message="Invalid q construct: {}".format(value)
+                        ))
+                    self._hop = value
 
             # Check for a trailing *
             elif value[-1] == "*":
                 self.used = True
-                self._hop = Station(callsign=value[:-1])
+                try:
+                    self._hop = Station(callsign=value[:-1])
+                except ValueError:
+                    if self._warnings is not None:
+                        self._warnings.append(ParseWarning(
+                            code=ParseWarningCode.PATH_INVALID_HOP,
+                            message="Invalid path hop: {}".format(value)
+                        ))
+                    self._hop = value
 
             else:
                 self.used = False
-                self._hop = Station(callsign=value)
+                try:
+                    self._hop = Station(callsign=value)
+                except ValueError:
+                    if self._warnings is not None:
+                        self._warnings.append(ParseWarning(
+                            code=ParseWarningCode.PATH_INVALID_HOP,
+                            message="Invalid path hop: {}".format(value)
+                        ))
+                    self._hop = value
         else:
             raise TypeError(
                 "Station must be of type 'str', 'Hop' or 'QConstruct' ({} given)".format(
@@ -250,7 +274,7 @@ class Path:
     """
     Class for describing a path.
     """
-    def __init__(self, path: Optional[Union[str, List[PathHop]]]):
+    def __init__(self, path: Optional[Union[str, List[PathHop]]], _warnings: list = None):
         """
         Create a new path.
 
@@ -258,6 +282,7 @@ class Path:
             :class:`PathHop` objects
         """
         self._path_hops = []
+        self._warnings = _warnings
         if path:
             self.path = path
 
@@ -269,7 +294,10 @@ class Path:
     def path(self, value: str):
         if type(value) is str:
             # Split the path
-            self._path_hops = [PathHop(hop=path_hop) for path_hop in value.split(",")]
+            self._path_hops = [
+                PathHop(hop=path_hop, _warnings=self._warnings)
+                for path_hop in value.split(",")
+            ]
         else:
             raise TypeError("Path must be of type 'str' ({} given)".format(type(value)))
 

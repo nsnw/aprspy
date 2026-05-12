@@ -23,11 +23,11 @@ def test_repr(packet):
 
 
 def test_data_type_id(packet):
-    assert packet.data_type_id == "T"
+    assert packet.data_type_id is None
 
 
 def test_comment(packet):
-    assert packet.comment == "his is a beacon"
+    assert packet.comment == "This is a beacon"
 
 
 def test_comment_setter():

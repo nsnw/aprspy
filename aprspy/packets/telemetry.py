@@ -7,6 +7,7 @@ from bitstring import Bits
 
 from ..exceptions import ParseError
 from ..utils import APRSUtils
+from ..warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 from .generic import GenericPacket
 
 # Set up logging
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 class TelemetryAnalogValue:
     _value = None
 
-    def __init__(self, value):
+    def __init__(self, value, _warnings: list = None):
+        self._warnings = _warnings
         self.value = value
 
     @property
@@ -27,13 +29,39 @@ class TelemetryAnalogValue:
     def value(self, value):
         if type(value) is str:
             if value == "":
-                value = None
-            elif "." in value:
-                value = round(float(value), 2)
-            else:
-                value = int(value)
+                self._value = None
+                return
+            try:
+                self._value = round(float(value), 2) if "." in value else int(value)
+                return
+            except (ValueError, TypeError):
+                pass
 
-        self._value = value
+            # Try to recover a leading numeric prefix (e.g. "13.18}}" → 13.18)
+            m = re.match(r'^-?[\d.]+', value)
+            if m:
+                recovered = m.group()
+                try:
+                    self._value = round(float(recovered), 2) if "." in recovered else int(recovered)
+                    if self._warnings is not None:
+                        self._warnings.append(ParseWarning(
+                            code=ParseWarningCode.TELEMETRY_INVALID_ANALOG_VALUE,
+                            message="Analog value {!r} has trailing junk; using {!r}".format(
+                                value, recovered),
+                            severity=ParseWarningSeverity.LENIENT
+                        ))
+                    return
+                except (ValueError, TypeError):
+                    pass
+
+            if self._warnings is not None:
+                self._warnings.append(ParseWarning(
+                    code=ParseWarningCode.TELEMETRY_INVALID_ANALOG_VALUE,
+                    message="Could not parse analog value {!r}".format(value)
+                ))
+            self._value = None
+        else:
+            self._value = value
 
     def __str__(self) -> str:
         return str(self.value)
@@ -109,7 +137,7 @@ class TelemetryPacket(GenericPacket):
         if type(value) is TelemetryAnalogValue:
             self._av1 = value
         else:
-            self._av1 = TelemetryAnalogValue(value)
+            self._av1 = TelemetryAnalogValue(value, _warnings=getattr(self, '_parse_warnings', None))
 
     @property
     def av2(self) -> TelemetryAnalogValue:
@@ -120,7 +148,7 @@ class TelemetryPacket(GenericPacket):
         if type(value) is TelemetryAnalogValue:
             self._av2 = value
         else:
-            self._av2 = TelemetryAnalogValue(value)
+            self._av2 = TelemetryAnalogValue(value, _warnings=getattr(self, '_parse_warnings', None))
 
     @property
     def av3(self) -> TelemetryAnalogValue:
@@ -131,7 +159,7 @@ class TelemetryPacket(GenericPacket):
         if type(value) is TelemetryAnalogValue:
             self._av3 = value
         else:
-            self._av3 = TelemetryAnalogValue(value)
+            self._av3 = TelemetryAnalogValue(value, _warnings=getattr(self, '_parse_warnings', None))
 
     @property
     def av4(self) -> TelemetryAnalogValue:
@@ -142,7 +170,7 @@ class TelemetryPacket(GenericPacket):
         if type(value) is TelemetryAnalogValue:
             self._av4 = value
         else:
-            self._av4 = TelemetryAnalogValue(value)
+            self._av4 = TelemetryAnalogValue(value, _warnings=getattr(self, '_parse_warnings', None))
 
     @property
     def av5(self) -> TelemetryAnalogValue:
@@ -153,7 +181,7 @@ class TelemetryPacket(GenericPacket):
         if type(value) is TelemetryAnalogValue:
             self._av5 = value
         else:
-            self._av5 = TelemetryAnalogValue(value)
+            self._av5 = TelemetryAnalogValue(value, _warnings=getattr(self, '_parse_warnings', None))
 
     @property
     def dv(self) -> TelemetryDigitalValue:
@@ -201,7 +229,16 @@ class TelemetryPacket(GenericPacket):
         # Telemetry packets without the digital section BUT with a comment have also been seen. If
         # we catch an exception doing this, assume the whole remainder is a comment
         try:
-            (self.dv, self.comment) = re.match(r'(\d+)[\s,]?(.*)', remainder).groups()
+            (dv_str, self.comment) = re.match(r'(\d+)[\s,]?(.*)', remainder).groups()
+            if not re.match(r'^[01]{1,8}$', dv_str):
+                normalised = re.sub(r'[2-9]', '1', dv_str)
+                self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
+                           "Digital value '{}' contains non-binary digits; normalising to '{}'".format(
+                               dv_str, normalised),
+                           ParseWarningSeverity.LENIENT)
+                self.dv = normalised
+            else:
+                self.dv = dv_str
 
         except AttributeError:
             # No match, which means there's no digital values
@@ -209,11 +246,13 @@ class TelemetryPacket(GenericPacket):
 
         except ValueError:
             # This is likely due to an invalid digital value
-            logger.warning("Invalid digital value in '{}', ignoring.".format(remainder))
+            self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
+                       "Invalid digital value in '{}', ignoring.".format(remainder))
 
         except bitstring.CreationError:
             # Failed to add the digital value, so skip it
-            logger.warning("Invalid digital value in '{}', ignoring.".format(remainder))
+            self._warn(ParseWarningCode.TELEMETRY_INVALID_DIGITAL_VALUE,
+                       "Invalid digital value in '{}', ignoring.".format(remainder))
 
         return True
 

@@ -5,6 +5,7 @@ from datetime import datetime, UTC
 
 from aprspy.utils import APRSUtils
 from aprspy.exceptions import ParseError
+from aprspy.warnings import ParseWarningCode
 
 
 # Uncompressed latitudes
@@ -370,12 +371,12 @@ def test_decode_timestamp_hms_time():
 
 
 def test_decode_timestamp_zulu_invalid_time_value():
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="Invalid timestamp"):
         APRSUtils.decode_timestamp("322345z")
 
 
 def test_decode_timestamp_hms_invalid_time_value():
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="Invalid timestamp"):
         APRSUtils.decode_timestamp("254517h")
 
 

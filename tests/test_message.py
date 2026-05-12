@@ -75,7 +75,7 @@ def test_message_id_none(packet):
 
 def test_invalid_message_id():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{000001')
+        APRS.parse_packet('XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{000001', strict=True)
 
 
 def test_invalid_message_addressee_type():
@@ -199,7 +199,7 @@ def test_invalid_addressee_field_size():
 
 def test_message_invalid_message_id():
     with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{123456')
+        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::YY9YY-9  :This is a test message{123456', strict=True)
 
 
 def test_invalid_announcement_id():
@@ -208,9 +208,10 @@ def test_invalid_announcement_id():
     assert p.announcement_id == 'A'
 
 
-def test_invalid_bulletin():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin')
+def test_bulletin_no_id():
+    p = APRS.parse_packet(r'XX1XX-1>APRS,TCPIP*,qAC,TEST::BLN      :This is a test bulletin')
+    assert type(p).__name__ == 'MessagePacket'
+    assert p.addressee == 'BLN'
 
 
 # --- Generation ---
@@ -263,3 +264,35 @@ def test_generate_missing_message():
     m.addressee = "YY1YY-12"
     with pytest.raises(GenerateError):
         m.info
+
+
+def test_missing_separator_fallback():
+    from aprspy.warnings import ParseWarningCode
+    # Station omits ':' separator, uses space instead
+    p = APRS.parse_packet(
+        'HP2PCO-3>APMI03,WIDE2-2,qAR,HP2DFA-1::HP2PCO 438.635- tONE 100 Ciudad Colon PCARA'
+    )
+    from aprspy.packets.message import MessagePacket
+    assert isinstance(p, MessagePacket)
+    assert p.addressee == 'HP2PCO'
+    assert p.message == '438.635- tONE 100 Ciudad Colon PCARA'
+    assert any(w.code == ParseWarningCode.MESSAGE_MISSING_SEPARATOR for w in p.parse_warnings)
+
+
+def test_empty_body_parses():
+    # Station sends '::' with no addressee or message body
+    from aprspy.packets.message import MessagePacket
+    p = APRS.parse_packet('NEWBRY-1>APOTU0,WIDE2-1,qAR,WW8TF-15::')
+    assert isinstance(p, MessagePacket)
+    assert p.addressee is None
+    assert p.message is None
+
+
+def test_message_id_nonalnum_extension_stripped():
+    # Kenwood appends device extensions like '+[...]' after the numeric ID
+    from aprspy.packets.message import MessagePacket
+    raw = r'BH5UWP-9>RVPQV9,TCPIP*,qAC,T2FZ::BH5UWP-8 :hello{1+[/`"4F}'
+    p = APRS.parse_packet(raw)
+    assert isinstance(p, MessagePacket)
+    assert p.message_id == '1'
+    assert p.message == 'hello'

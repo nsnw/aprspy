@@ -9,6 +9,7 @@ from typing import Tuple, Optional, Union
 
 from ..exceptions import ParseError, GenerateError
 from ..utils import APRSUtils
+from ..warnings import ParseWarningCode, ParseWarningSeverity
 from .generic import GenericPacket
 
 logger = logging.getLogger(__name__)
@@ -332,6 +333,12 @@ class PositionPacket(GenericPacket):
         if len(data) < 13:
             raise ValueError("Compressed position data must be at least 13 characters")
 
+        # Symbol table must be /, \, 0-9, or A-Z (uppercase overlay).
+        # Accept lowercase letters too — some firmware (e.g. DigiPi) uses a-z as non-standard
+        # overlays; _parse_compressed() emits a LENIENT warning for these.
+        if data[0] not in '/\\' and not data[0].isdigit() and not data[0].isalpha():
+            raise ValueError("Invalid symbol table identifier for compressed position: {!r}".format(data[0]))
+
         logger.debug("Compressed lat/lng: {}".format(data))
 
         latitude = APRSUtils.decode_compressed_latitude(data[1:5])
@@ -433,7 +440,7 @@ class PositionPacket(GenericPacket):
             if len(data) < 7:
                 raise ParseError("Missing timestamp in position packet", self)
             try:
-                self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7])
+                self.timestamp, self.timestamp_type = APRSUtils.decode_timestamp(data[0:7], self._parse_warnings)
                 data = data[7:]
             except ParseError:
                 # Invalid or placeholder timestamp (e.g. '<data>z', '......z', or omitted
@@ -455,8 +462,24 @@ class PositionPacket(GenericPacket):
         self._parse_position_data(data)
         return True
 
+    def _preprocess_position_data(self, data: str) -> str:
+        """Apply DEL-as-backspace and strip leading whitespace, emitting INFO warnings."""
+        processed = APRSUtils.apply_del_chars(data)
+        if processed != data:
+            self._warn(ParseWarningCode.POSITION_DEL_CHARS_APPLIED,
+                       "DEL (\\x7f) chars applied as backspace in position data",
+                       ParseWarningSeverity.LENIENT)
+        lstripped = processed.lstrip()
+        if lstripped != processed:
+            self._warn(ParseWarningCode.POSITION_LEADING_WHITESPACE,
+                       "Leading whitespace stripped from position data",
+                       ParseWarningSeverity.LENIENT)
+            processed = lstripped
+        return processed
+
     def _parse_position_data(self, data: str):
         """Parse position data as uncompressed, compressed, or X1J-offset fallback."""
+        data = self._preprocess_position_data(data)
         if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
             self._parse_uncompressed(data)
             return
@@ -485,6 +508,10 @@ class PositionPacket(GenericPacket):
         (self.latitude, self.longitude, self.ambiguity,
          self.symbol_table, self.symbol_id) = self._parse_uncompressed_position(data)
         self.compressed = False
+        if self.latitude is None:
+            self._warn(ParseWarningCode.POSITION_NO_DATA,
+                       "Position is a placeholder (all-spaces coordinates)",
+                       ParseWarningSeverity.LENIENT)
 
         if len(data) <= 19:
             return

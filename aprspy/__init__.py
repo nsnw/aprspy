@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Type
 
 from .exceptions import ParseError, UnsupportedError
+from .warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 from .packets.base import Packet
 from .packets.generic import GenericPacket
 from .packets.beacon import BeaconPacket
@@ -27,7 +28,7 @@ from .packets.nmea import NMEAPacket
 from .packets.weather import WeatherPacket
 from .packets.third_party import ThirdPartyPacket
 from .packets.query import QueryPacket
-from .packets.ultimeter import UltimeterPacket
+from .packets.ultimeter import UltimeterPacket, Ultimeter2000Packet
 
 __version__ = "0.5.0"
 
@@ -36,6 +37,25 @@ logger = logging.getLogger(__name__)
 
 # Named tuple to hold original raw values
 Raw = namedtuple('Raw', ['source', 'destination', 'path', 'information'])
+
+# Maps each packet type to the downgrade code used when its parse() raises ParseError.
+_DOWNGRADE_CODE = {
+    MICEPacket:           ParseWarningCode.MICE_PARSE_FAILED,
+    PositionPacket:       ParseWarningCode.POSITION_PARSE_FAILED,
+    NMEAPacket:           ParseWarningCode.NMEA_PARSE_FAILED,
+    MessagePacket:        ParseWarningCode.MESSAGE_PARSE_FAILED,
+    ObjectPacket:         ParseWarningCode.OBJECT_PARSE_FAILED,
+    ItemReportPacket:     ParseWarningCode.ITEM_REPORT_PARSE_FAILED,
+    StatusPacket:         ParseWarningCode.STATUS_PARSE_FAILED,
+    TelemetryPacket:      ParseWarningCode.TELEMETRY_PARSE_FAILED,
+    WeatherPacket:        ParseWarningCode.WEATHER_PARSE_FAILED,
+    ThirdPartyPacket:     ParseWarningCode.THIRD_PARTY_PARSE_FAILED,
+    BeaconPacket:         ParseWarningCode.BEACON_PARSE_FAILED,
+    QueryPacket:          ParseWarningCode.QUERY_PARSE_FAILED,
+    UltimeterPacket:      ParseWarningCode.ULTIMETER_PARSE_FAILED,
+    Ultimeter2000Packet:  ParseWarningCode.ULTIMETER2000_PARSE_FAILED,
+    UserDefinedPacket:    ParseWarningCode.USER_DEFINED_PARSE_FAILED,
+}
 
 BEACON_ADDRESSES = [
     'AIR', 'ALL', 'AP', 'BEACON', 'CQ', 'GPS', 'DF', 'DGPS', 'DRILL', 'DX', 'ID', 'JAVA', 'MAIL',
@@ -119,7 +139,7 @@ class APRS:
         """
         try:
             (source, destination, path, data_type_id, info) = re.match(
-                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+),([A-Za-z0-9\-*,]+):(.?)(.*)',
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+)(?:,([A-Za-z0-9\-*,]+))?:(.?)(.*)',
                 packet
             ).groups()
 
@@ -227,7 +247,7 @@ class APRS:
         """
         Check if the packet is a telemetry parameter name packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:PARM\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:PARM\.', packet):
             return True
 
         return False
@@ -237,7 +257,7 @@ class APRS:
         """
         Check if the packet is a telemetry unit label packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:UNIT\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:UNIT\.', packet):
             return True
 
         return False
@@ -247,7 +267,7 @@ class APRS:
         """
         Check if the packet is a telemetry equation coefficients packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:EQNS\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:EQNS\.', packet):
             return True
 
         return False
@@ -257,7 +277,7 @@ class APRS:
         """
         Check if the packet is a telemetry bit sense project name packet.
         """
-        if re.search(r'::[A-Za-z0-9\-]+\s*:BITS\.', packet):
+        if re.search(r'::[A-Za-z0-9\- ]+\s*:BITS\.', packet):
             return True
 
         return False
@@ -297,6 +317,12 @@ class APRS:
         if cls.is_beacon_destination(destination):
             logger.debug("Packet is a beacon packet")
             packet_type = BeaconPacket
+
+        # Peet Bros Ultimeter 2000 '!!' raw format: DTI '!' + info starts with '!'.
+        # Intercept before PositionPacket since '!' is also a position DTI.
+        elif data_type_id == '!' and info.startswith('!'):
+            logger.debug("Packet is a Peet Bros Ultimeter 2000 raw weather packet")
+            packet_type = Ultimeter2000Packet
 
         # Next, check the data type ID to see if it matches those used by position packets.
         elif cls.is_position_data_type_id(data_type_id):
@@ -362,12 +388,14 @@ class APRS:
         # Check if the data type ID indicates a user-defined packet.
         elif cls.is_user_defined_data_type_id(data_type_id):
             logger.debug("Packet is a user-defined packet")
-            logger.warning(
-                "User-defined packets are not fully supported."
-            )
             packet_type = UserDefinedPacket
 
         # Unsupported packet types.
+        # Peet Bros Ultimeter 2000 uses DTI '$' but starts with 'ULTW' — intercept before NMEA.
+        elif data_type_id == '$' and info.startswith('ULTW'):
+            logger.debug("Packet is a Peet Bros Ultimeter 2000 weather packet")
+            packet_type = Ultimeter2000Packet
+
         # Check if the data type ID indicates a raw NMEA position report packet.
         elif cls.is_raw_nmea_position_report_data_type_id(data_type_id):
             logger.debug("Packet is a raw NMEA position report packet")
@@ -433,9 +461,32 @@ class APRS:
         logger.debug("Raw packet: {}".format(packet))
 
         # Parse out the basic details of the packet.
-        (source, destination, path, data_type_id, info) = cls.parse_basic_data(
-            packet=packet, strict=strict
-        )
+        try:
+            (source, destination, path, data_type_id, info) = cls.parse_basic_data(
+                packet=packet, strict=strict
+            )
+        except ParseError as e:
+            if strict:
+                raise
+            # Basic structure parsed but source/destination failed validation.
+            # Re-extract without validation so we can still return a GenericPacket.
+            m = re.match(
+                r'([A-Za-z0-9\-]+)>([A-Za-z0-9\-]+)(?:,([A-Za-z0-9\-*,]+))?:(.?)(.*)',
+                packet
+            )
+            fallback = GenericPacket()
+            if m:
+                fallback._source, fallback._destination, fallback._path, \
+                    _dti, _info = m.groups()
+                fallback._info = (_dti or '') + (_info or '')
+            _w = ParseWarning(
+                code=ParseWarningCode.GENERIC_PARSE_FAILED,
+                message=str(e),
+                severity=ParseWarningSeverity.DOWNGRADE
+            )
+            logger.warning(str(_w))
+            fallback._parse_warnings.append(_w)
+            return fallback
 
         # Create a checksum, to provide a quick comparison against other packets
         checksum = md5((source + info).encode()).hexdigest()
@@ -450,11 +501,25 @@ class APRS:
             info=info
         )
 
+        # For beacon packets (destination-dispatched) and genuinely unrecognised packets
+        # (GenericPacket), the regex split treated the first info char as data_type_id
+        # but there is no meaningful DTI. Reconstruct the full info and clear data_type_id
+        # so callers can distinguish "parsed typed packet" from "unknown/freeform".
+        # Note: the DOWNGRADE path creates its own GenericPacket after except ParseError,
+        # so downgraded packets retain their original data_type_id unaffected.
+        if packet_type in (BeaconPacket, GenericPacket):
+            # Only prepend to info if the char is printable ASCII — it's part of the
+            # freeform content (e.g. 'U' in 'UIDIGI 1.9'). Control chars, non-ASCII,
+            # and the Unicode replacement character are garbage and are discarded.
+            if data_type_id and 0x20 <= ord(data_type_id) <= 0x7e:
+                info = data_type_id + info
+            data_type_id = None
+
         # For X1J-style offset packets, get_packet_type rewrites info and data_type_id locally
         # but doesn't return them. Replicate that here so the packet is constructed correctly.
         # Guard with is_position_data_type_id to avoid misidentifying compressed packets whose
         # base-91 encoded data happens to contain '!'.
-        if (packet_type is PositionPacket
+        elif (packet_type is PositionPacket
                 and not cls.is_position_data_type_id(data_type_id)
                 and cls.is_position_info_with_offset(info)):
             info = data_type_id + info
@@ -470,6 +535,26 @@ class APRS:
             info=info
         )
 
-        packet.parse()
+        try:
+            packet.parse()
+        except ParseError as e:
+            if strict:
+                raise
+            parse_error_msg = str(e)
+            packet = GenericPacket(
+                source=source,
+                destination=destination,
+                path=path,
+                data_type_id=data_type_id,
+                info=info
+            )
+            packet.parse()
+            _w = ParseWarning(
+                code=_DOWNGRADE_CODE.get(packet_type, ParseWarningCode.GENERIC_PARSE_FAILED),
+                message=str(parse_error_msg),
+                severity=ParseWarningSeverity.DOWNGRADE
+            )
+            logger.warning(str(_w))
+            packet._parse_warnings.append(_w)
 
         return packet

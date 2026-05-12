@@ -123,11 +123,21 @@ def test_compressed_comment(compressed):
     assert compressed.comment == "Test compressed"
 
 
-def test_invalid_live_killed():
+def test_nonstandard_indicator_with_timestamp():
+    # Non-standard indicator followed by a valid timestamp is accepted with a LENIENT warning.
+    from aprspy.packets.object import ObjectPacket
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X092345z4903.50N/07201.75W>')
+    assert type(p) == ObjectPacket
+    assert any(w.code == ParseWarningCode.OBJECT_NONSTANDARD_INDICATOR for w in p.parse_warnings)
+
+
+def test_nonstandard_indicator_without_timestamp():
+    # Non-standard indicator NOT followed by a timestamp still raises ParseError.
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X092345z4903.50N/07201.75W>')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X not-a-timestamp at all here', strict=True)
 
 
 def test_too_short():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT', strict=True)

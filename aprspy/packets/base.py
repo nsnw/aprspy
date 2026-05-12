@@ -1,6 +1,10 @@
-from typing import Self
+import logging
+from typing import List, Self
 from aprspy.components import Path, Station
 from aprspy.exceptions import InvalidSourceException, InvalidDestinationException
+from aprspy.warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity, ParseResult
+
+logger = logging.getLogger(__name__)
 
 
 class Packet:
@@ -24,6 +28,8 @@ class Packet:
             data_type_id: str = None,
             info: str = None
     ):
+        self._parse_warnings: List[ParseWarning] = []
+
         if source:
             self.source = source
 
@@ -36,8 +42,32 @@ class Packet:
         if data_type_id:
             self.data_type_id = data_type_id
 
-        if info:
+        if info is not None:
             self.info = info
+
+    def _warn(self, code: ParseWarningCode, message: str,
+              severity: ParseWarningSeverity = ParseWarningSeverity.LENIENT) -> None:
+        """Log a parse warning and record it on the packet."""
+        w = ParseWarning(code=code, message=message, severity=severity)
+        if severity == ParseWarningSeverity.DOWNGRADE:
+            logger.warning(str(w))
+        else:
+            logger.info(str(w))
+        self._parse_warnings.append(w)
+
+    @property
+    def parse_warnings(self) -> List[ParseWarning]:
+        """List of :class:`~aprspy.warnings.ParseWarning` objects generated during parsing."""
+        return self._parse_warnings
+
+    @property
+    def parse_result(self) -> ParseResult:
+        """Overall quality of the parsed packet."""
+        if not self._parse_warnings:
+            return ParseResult.OK
+        if any(w.severity == ParseWarningSeverity.DOWNGRADE for w in self._parse_warnings):
+            return ParseResult.DOWNGRADED
+        return ParseResult.LENIENT
 
     @property
     def source(self) -> Station:
@@ -86,7 +116,7 @@ class Packet:
     def path(self, value: str | Path):
         """Set the path for the packet"""
         if type(value) is str:
-            self._path = Path(path=value)
+            self._path = Path(path=value, _warnings=self._parse_warnings)
 
         elif type(value) is Path:
             self._path = value

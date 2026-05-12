@@ -151,4 +151,4 @@ def test_position_based_weather_fields(position_based):
 
 def test_too_short():
     with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:_1009')
+        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:_1009', strict=True)

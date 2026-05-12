@@ -131,11 +131,15 @@ def test_with_hdg_and_pwr_status_message(packet_with_hdg_and_pwr):
     assert packet_with_hdg_and_pwr.status_message == "Test status with heading and power^B7"
 
 
-def test_invalid_mh6_status_message_missing_initial_space():
-    with pytest.raises(ParseError):
-        APRS.parse_packet(
-            r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator'
-        )
+def test_mh6_status_message_missing_initial_space():
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet(
+        r'XX1XX-1>APRS,TCPIP*,qAC,TEST:>DO21XA/-Test status with 6 digit Maidenhead locator'
+    )
+    assert isinstance(p, StatusPacket)
+    assert p.maidenhead_locator == 'DO21XA'
+    assert p.status_message == 'Test status with 6 digit Maidenhead locator'
+    assert any(w.code == ParseWarningCode.STATUS_MAIDENHEAD_NO_TEXT_SPACE for w in p.parse_warnings)
 
 
 def test_invalid_mh4_status_message_missing_initial_space():

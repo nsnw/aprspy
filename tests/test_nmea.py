@@ -11,6 +11,8 @@ RAW_GPGGA = 'XX1XX>APRS,TCPIP*,qAC,TEST:$GPGGA,092345.00,4903.55,N,07201.75,W,1,
 RAW_GPGLL = 'XX1XX>APRS,TCPIP*,qAC,TEST:$GPGLL,4903.55,N,07201.75,W,092345,A*39'
 RAW_BAD_CHECKSUM = 'XX1XX>APRS,TCPIP*,qAC,TEST:$GPRMC,092345,A,4903.55,N,07201.75,W,36.0,88.0,090409,,,A*FF'
 RAW_UNKNOWN_TYPE = 'XX1XX>APRS,TCPIP*,qAC,TEST:$GPZDA,092345.00,09,04,2009,,*69'
+RAW_TRAILING_SUFFIX = r'KC7ILK-2>GPSPR,WIDE1-1,WIDE2-1,qAR,BORING:$GPRMC,012510.000,A,4544.9676,N,12240.2962,W,0.00,221.04,271020,,,A*7D/W1'
+RAW_TRAILING_COMMENT = r'WB4BYQ-3>APT311,WIDE2-2,qAS,K4RY-1:$GPRMC,041807,A,3242.4373,N,08527.2562,W,000,129,040526,,*05/Home Station by TinyTrac'
 
 
 @pytest.fixture
@@ -159,3 +161,20 @@ def test_unknown_sentence_type():
     assert p.sentence_type == "ZDA"
     assert p.latitude is None
     assert p.longitude is None
+
+
+# --- Trailing data after checksum ---
+
+def test_trailing_suffix_parses():
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet(RAW_TRAILING_SUFFIX)
+    assert type(p) == NMEAPacket
+    assert round(p.latitude, 4) == 45.7495
+    assert any(w.code == ParseWarningCode.NMEA_TRAILING_DATA for w in p.parse_warnings)
+
+
+def test_trailing_comment_parses():
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet(RAW_TRAILING_COMMENT)
+    assert type(p) == NMEAPacket
+    assert any(w.code == ParseWarningCode.NMEA_TRAILING_DATA for w in p.parse_warnings)
