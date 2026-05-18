@@ -30,7 +30,7 @@ from .packets.third_party import ThirdPartyPacket
 from .packets.query import QueryPacket
 from .packets.ultimeter import UltimeterPacket, Ultimeter2000Packet
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # Set up logging
 logger = logging.getLogger(__name__)
