@@ -480,9 +480,14 @@ class PositionPacket(GenericPacket):
     def _parse_position_data(self, data: str):
         """Parse position data as uncompressed, compressed, or X1J-offset fallback."""
         data = self._preprocess_position_data(data)
-        if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', data):
-            self._parse_uncompressed(data)
-            return
+        # Accept dots alongside digits/spaces so dot-padded "no GPS fix" positions
+        # route to the uncompressed parser instead of falling through.
+        if re.match(r'[0-9\s.]{4}\.[0-9\s.]{2}[NS].[0-9\s.]{5}\.[0-9\s.]{2}[EW]', data):
+            try:
+                self._parse_uncompressed(data)
+                return
+            except ParseError:
+                pass
 
         try:
             self._parse_compressed(data)
@@ -499,10 +504,35 @@ class PositionPacket(GenericPacket):
                 if re.match(r'[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]', x1j_data):
                     self._parse_uncompressed(x1j_data)
                     return
-                self._parse_compressed(x1j_data)
-                return
+                try:
+                    self._parse_compressed(x1j_data)
+                    return
+                except ParseError:
+                    pass
 
-        raise ParseError("Couldn't parse position data", self)
+        # Last-resort fallback for position-DTI packets where the position field
+        # is missing, malformed, or replaced with placeholder characters (common
+        # with LoRa trackers waiting for a GPS fix, or stations using position
+        # DTIs as a transport for weather/status data). Record the packet as
+        # positionless and parse the remainder as comment + weather.
+        self.latitude = None
+        self.longitude = None
+        self.ambiguity = 4
+        self.compressed = False
+        self.symbol_table = None
+        self.symbol_id = None
+        self.comment = data if data else None
+        # Parse weather fields opportunistically — many positionless trackers
+        # carry t/h/b/c/s/g/p/r/P fields in the comment regardless of symbol.
+        if self.comment:
+            from .weather import parse_weather_data
+            fields = parse_weather_data(self.comment)
+            if any(v is not None for v in fields.values()):
+                for key, val in fields.items():
+                    setattr(self, key, val)
+        self._warn(ParseWarningCode.POSITION_NO_DATA,
+                   "No usable position data; storing remainder as comment",
+                   ParseWarningSeverity.LENIENT)
 
     def _parse_uncompressed(self, data: str):
         (self.latitude, self.longitude, self.ambiguity,

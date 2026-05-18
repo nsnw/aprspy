@@ -56,10 +56,13 @@ class APRSUtils:
         """
         logger.debug("Input latitude: {}".format(latitude))
 
-        # All-spaces placeholder (e.g. "    .  N") — position unknown
+        # All-spaces or all-dots placeholder ("    .  N" / "....-..N") — position unknown.
+        # All-dots is the canonical "no GPS fix yet" pattern emitted by many LoRa
+        # trackers and similar devices.
         if (len(latitude) == 8 and latitude[4] == '.' and latitude[7] in 'NS'
-                and latitude[:4].replace(' ', '') == '' and latitude[5:7].replace(' ', '') == ''):
-            return None, 0
+                and latitude[:4].replace(' ', '').replace('.', '') == ''
+                and latitude[5:7].replace(' ', '').replace('.', '') == ''):
+            return None, 4 if '.' in latitude[:4] + latitude[5:7] else 0
 
         # Regex match to catch any obviously-invalid latitudes
         if not re.match(r'^[0-9]{2}[\s0-9]{2}\.[\s0-9]{2}[NS]$', latitude):
@@ -257,9 +260,10 @@ class APRSUtils:
             longitude, ambiguity
         ))
 
-        # All-spaces placeholder (e.g. "     .  E") — position unknown
+        # All-spaces or all-dots placeholder — position unknown
         if (len(longitude) == 9 and longitude[5] == '.' and longitude[8] in 'EW'
-                and longitude[:5].replace(' ', '') == '' and longitude[6:8].replace(' ', '') == ''):
+                and longitude[:5].replace(' ', '').replace('.', '') == ''
+                and longitude[6:8].replace(' ', '').replace('.', '') == ''):
             return None
 
         # Regex match to catch any obviously-invalid longitudes

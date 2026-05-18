@@ -68,7 +68,18 @@ class ObjectPacket(PositionPacket):
                 nonstandard_indicator = True
 
         if indicator_idx is None:
-            raise ParseError("No live/killed indicator found in object packet", self)
+            # No live/killed indicator at all — some older or hand-rolled stations
+            # use ';' as a freeform bulletin/announcement channel. Treat the post-';'
+            # text as the comment, default alive=True, and emit a LENIENT warning.
+            self.object_name = None
+            self.alive = True
+            self.comment = self._info
+            self._warn(
+                ParseWarningCode.OBJECT_MISSING_INDICATOR,
+                "No live/killed indicator; treating as freeform object/bulletin",
+                ParseWarningSeverity.LENIENT,
+            )
+            return True
 
         self.object_name = self._info[:indicator_idx].rstrip()
         if nonstandard_indicator:

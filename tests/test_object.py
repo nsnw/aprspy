@@ -133,11 +133,58 @@ def test_nonstandard_indicator_with_timestamp():
 
 
 def test_nonstandard_indicator_without_timestamp():
-    # Non-standard indicator NOT followed by a timestamp still raises ParseError.
-    with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X not-a-timestamp at all here', strict=True)
+    # Non-standard indicator NOT followed by a timestamp falls through to the
+    # missing-indicator path (lenient freeform object).
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;LEADER   X not-a-timestamp at all here')
+    assert type(p) == ObjectPacket
+    assert p.alive is True
+    assert any(w.code == ParseWarningCode.OBJECT_MISSING_INDICATOR for w in p.parse_warnings)
 
 
 def test_too_short():
-    with pytest.raises(ParseError):
-        APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT', strict=True)
+    # Short ';' frames with no indicator are now treated as freeform bulletins
+    # rather than parse failures.
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:;SHORT')
+    assert type(p) == ObjectPacket
+    assert p.comment == 'SHORT'
+    assert any(w.code == ParseWarningCode.OBJECT_MISSING_INDICATOR for w in p.parse_warnings)
+
+
+@pytest.mark.parametrize("raw,name", [
+    ('OE7XLI-S>APJIO4,TCPIP*,qAC,OE7XLI-GS:;OE7XLI B *141926z    .  ND     .  EaRNG0015 440 Voice 438,5750 -7,60', 'OE7XLI B'),
+    ('N5BL-S>APJIO4,TCPIP*,qAC,N5BL-GS:;N5BL   C *151700z    .  ND     .  EaRNG0040 2m Voice 146.84 -0.600 Mhz', 'N5BL   C'),
+    ('N4TNS-S>APJIO4,TCPIP*,qAC,N4TNS-GS:;N4TNS  C *090507z    .  ND     .  EaRNG0020 2m Voice 147.120 +0.6 MHz', 'N4TNS  C'),
+])
+def test_ambiguous_position(raw, name):
+    # Fully ambiguous (.-padded) coordinates must not raise AttributeError
+    p = APRS.parse_packet(raw)
+    assert type(p) == ObjectPacket
+    assert p.object_name == name
+    assert p.latitude is None
+    assert p.longitude is None
+
+
+def test_runt_object_packet():
+    # Object packet with nothing after the ';'
+    p = APRS.parse_packet('NEWBRY-1>APOTU0,WIDE2-1,qAR,KC8MXW-10:;')
+    assert type(p) == ObjectPacket
+    assert p.object_name is None
+
+
+@pytest.mark.parametrize("raw,expected_comment", [
+    ('K4UAN-3>APN383,qAR,W4CAT-1:;K1LH Memorial DiGi', 'K1LH Memorial DiGi'),
+    ('ACARC-1>APTT4,WIDE2-2,qAR,KO6KL-10:;!K6ARC! W2 Amador County ARC', '!K6ARC! W2 Amador County ARC'),
+    ('K4UAN-3>APN383,qAR,KR4BT-10:;ARES NET SUNDAY AT 8:00 P.M. SKYWARN NET WHEN REQUESTED BY EMA or EC',
+     'ARES NET SUNDAY AT 8:00 P.M. SKYWARN NET WHEN REQUESTED BY EMA or EC'),
+])
+def test_missing_live_killed_indicator(raw, expected_comment):
+    # ';' frames without a */_ indicator are treated as freeform announcements.
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet(raw)
+    assert type(p) == ObjectPacket
+    assert p.alive is True
+    assert p.object_name is None
+    assert p.comment == expected_comment
+    assert any(w.code == ParseWarningCode.OBJECT_MISSING_INDICATOR for w in p.parse_warnings)

@@ -152,3 +152,20 @@ def test_position_based_weather_fields(position_based):
 def test_too_short():
     with pytest.raises(ParseError):
         APRS.parse_packet('XX1XX>APRS,TCPIP*,qAC,TEST:_1009', strict=True)
+
+
+def test_ddmmhhmm_fallback():
+    # SP9SVH-2 firmware emits DDMMHHMM instead of MMDDHHMM. Month 16 is
+    # invalid; the swap to day=16/month=05 is plausible and should produce
+    # a LENIENT TIMESTAMP_FIELD_ORDER_SWAPPED warning.
+    from aprspy.warnings import ParseWarningCode
+    raw = 'SP9SVH-2>APRX29,WIDE1-1,QA6L9,qAR,SQ9LDR-2:_16050154c226s000g000t050r000p013P003h097b10014'
+    p = APRS.parse_packet(raw)
+    assert type(p) == WeatherPacket
+    assert p.timestamp.month == 5
+    assert p.timestamp.day == 16
+    assert p.timestamp.hour == 1
+    assert p.timestamp.minute == 54
+    assert p.temperature == 50
+    assert p.pressure == 1001.4
+    assert any(w.code == ParseWarningCode.TIMESTAMP_FIELD_ORDER_SWAPPED for w in p.parse_warnings)

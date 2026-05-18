@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..exceptions import ParseError
-from ..warnings import ParseWarning
+from ..warnings import ParseWarning, ParseWarningCode, ParseWarningSeverity
 from .position import PositionPacket
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,32 @@ class WeatherPacket(PositionPacket):
                 self.timestamp = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
                 self.timestamp_type = 'positionless'
             except ValueError as e:
-                raise ParseError(f"Invalid timestamp in weather packet: {e}", self)
+                # Some firmware (e.g. SP9SVH-2) emits DDMMHHMM instead of the
+                # spec-required MMDDHHMM. Try the swap if the first field is an
+                # invalid month and the second is a valid one.
+                try:
+                    alt_day = int(ts_str[0:2])
+                    alt_month = int(ts_str[2:4])
+                    alt_hour = int(ts_str[4:6])
+                    alt_minute = int(ts_str[6:8])
+                    if month > 12 and 1 <= alt_month <= 12:
+                        year = datetime.now(timezone.utc).year
+                        self.timestamp = datetime(
+                            year, alt_month, alt_day, alt_hour, alt_minute,
+                            tzinfo=timezone.utc,
+                        )
+                        self.timestamp_type = 'positionless'
+                        self._warn(
+                            ParseWarningCode.TIMESTAMP_FIELD_ORDER_SWAPPED,
+                            f"Weather timestamp {ts_str!r} appears to be DDMMHHMM, "
+                            f"interpreting as {alt_day:02d}/{alt_month:02d} "
+                            f"{alt_hour:02d}:{alt_minute:02d}",
+                            ParseWarningSeverity.LENIENT,
+                        )
+                    else:
+                        raise ValueError(e)
+                except ValueError:
+                    raise ParseError(f"Invalid timestamp in weather packet: {e}", self)
 
         weather_data = self._info[8:]
         self._apply_weather(parse_weather_data(weather_data))

@@ -298,3 +298,42 @@ def test_compressed_lowercase_overlay():
     )
     assert type(p) == PositionPacket
     assert p.symbol_table == 'b'
+
+
+# --- No GPS fix / missing position fallback ---
+
+def test_no_gps_fix_lora_tracker():
+    # LoRa tracker emits dots where the position should be; weather data
+    # (t051h..b10098) is still present and parseable.
+    from aprspy.warnings import ParseWarningCode
+    p = APRS.parse_packet(
+        '2M0SBP-13>APLRG1,TCPIP*,qAC,T2SPAIN2:!.../...g...t051h..b10098LoRa APRS'
+    )
+    assert type(p) == PositionPacket
+    assert p.latitude is None
+    assert p.longitude is None
+    assert p.ambiguity == 4
+    assert p.temperature == 51
+    assert p.pressure == 1009.8
+    assert any(w.code == ParseWarningCode.POSITION_NO_DATA for w in p.parse_warnings)
+
+
+def test_position_dti_with_no_position_field():
+    # @-DTI packet with a timestamp but freeform text instead of a position.
+    p = APRS.parse_packet(
+        'MB7UCE>APMI03,WIDE2-2,qAO,M7CCZ-2:@160434 Power Supply = 14.0V'
+    )
+    assert type(p) == PositionPacket
+    assert p.latitude is None
+    assert p.comment == 'Power Supply = 14.0V'
+
+
+def test_position_dti_with_unparseable_compressed():
+    # !-DTI packet with a non-standard compressed symbol table; falls back to
+    # storing the body as comment instead of downgrading.
+    p = APRS.parse_packet(
+        'SH3JHL-8>APLRFT,WIDE1-1,WIDE2-1,qAO,SH3JHL-10:![.T%WR1a_>!!GLoRa APRS Tracker|(.!!!!|'
+    )
+    assert type(p) == PositionPacket
+    assert p.latitude is None
+    assert p.comment.startswith('[.T%WR1a_>')
