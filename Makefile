@@ -13,7 +13,7 @@ htmldoc:
 doc: cleandoc htmldoc
 
 dist:
-	python setup.py sdist bdist_wheel
+	poetry build
 
 clean:
 	rm -rfv build dist aprspy.egg-info
