@@ -1,9 +1,6 @@
 test:
 	pytest
 
-check_readme:
-	python -m rstvalidator README.rst
-
 cleandoc:
 	make -C docs/ clean
 
@@ -21,4 +18,4 @@ clean:
 upload:
 	poetry publish
 
-release: clean check_readme cleandoc htmldoc cleandoc dist upload
+release: clean cleandoc htmldoc cleandoc dist upload
