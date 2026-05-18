@@ -19,6 +19,6 @@ clean:
 	rm -rfv build dist aprspy.egg-info
 
 upload:
-	twine upload dist/*
+	poetry publish
 
 release: clean check_readme cleandoc htmldoc cleandoc dist upload
