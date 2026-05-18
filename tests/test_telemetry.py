@@ -78,3 +78,33 @@ def test_no_digital_value():
 def test_comment_with_space():
     p = APRS.parse_packet(RAW_WITH_COMMENT)
     assert p.comment == 'Test comment'
+
+
+@pytest.mark.parametrize("raw,expected_seq,expected_avs", [
+    # Truncated: fewer than 5 analog values
+    ('SR7SE-1>APLOX1,TCPIP*,qAC,T2POLC:T#418,197', '418', [197, None, None, None, None]),
+    ('LA7RR>APRS,TCPIP*,qAS,LD7TG:T#2146,533', '2146', [533, None, None, None, None]),
+    ('4O7JAZ>APDW16,TCPIP*,qAC,T2UK:T#502,13.5,23.2', '502', [13.5, 23.2, None, None, None]),
+    ('SQ9NFI>APRS,TCPIP*,qAC,T2PRT:T#086,000,106,051,153', '086', [0, 106, 51, 153, None]),
+])
+def test_truncated_analog_values(raw, expected_seq, expected_avs):
+    p = APRS.parse_packet(raw)
+    assert p.sequence_number == expected_seq
+    assert [p.av1.value, p.av2.value, p.av3.value, p.av4.value, p.av5.value] == expected_avs
+
+
+def test_sparse_analog_values_with_comment():
+    raw = 'KJ4UBX-13>APRS,TCPIP*,qAC,T2UKRAINE:T#055,180,060,012,042,,1111,Solar Power WX Station'
+    p = APRS.parse_packet(raw)
+    assert p.sequence_number == '055'
+    assert [p.av1.value, p.av2.value, p.av3.value, p.av4.value, p.av5.value] == [180, 60, 12, 42, None]
+    assert str(p.dv) == '1111'
+    assert p.comment == 'Solar Power WX Station'
+
+
+def test_sparse_analog_values_no_comment():
+    raw = 'VA7RCV-15>APZMDM,WIDE1-1,WIDE2-2,qAO,VA7RCV-10:T#795,3.599,21.460,1,99.631,,00000000'
+    p = APRS.parse_packet(raw)
+    assert p.sequence_number == '795'
+    assert [p.av1.value, p.av2.value, p.av3.value, p.av4.value, p.av5.value] == [3.6, 21.46, 1, 99.63, None]
+    assert str(p.dv) == '00000000'

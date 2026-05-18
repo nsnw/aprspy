@@ -93,3 +93,30 @@ def test_generate_missing_path():
     p.data_type_id = "!"
     with pytest.raises(GenerateError):
         p.generate()
+
+
+# --- Unrecognised DTI: clear data_type_id, preserve printable info ---
+
+def test_generic_clears_data_type_id_for_unrecognised():
+    # Unrecognised DTI ('U') should not be exposed as data_type_id; the full
+    # info string is preserved so callers can still inspect the raw payload.
+    p = APRS.parse_packet('YM2UDM>UIDIGI,qAR,YM1KTC-10:UIDIGI 1.9')
+    assert type(p) == GenericPacket
+    assert p.data_type_id is None
+    assert p.info == 'UIDIGI 1.9'
+
+
+@pytest.mark.parametrize("raw,expected_info", [
+    # Control characters and the Unicode replacement char must be discarded,
+    # not exposed via data_type_id or kept as info prefixes.
+    ('XX1XX>APRS,qAR,X:\x16hello', 'hello'),
+    ('XX1XX>APRS,qAR,X:\x01ctrl', 'ctrl'),
+    ('XX1XX>APRS,qAR,X:\x11xon', 'xon'),
+    ('XX1XX>APRS,qAR,X:\x7fdel', 'del'),
+    ('XX1XX>APRS,qAR,X:�replace', 'replace'),
+])
+def test_generic_discards_unprintable_dti(raw, expected_info):
+    p = APRS.parse_packet(raw)
+    assert type(p) == GenericPacket
+    assert p.data_type_id is None
+    assert p.info == expected_info
